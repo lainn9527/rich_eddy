@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List
 from collections import OrderedDict
 from pathlib import Path
@@ -11,7 +11,7 @@ from src.data_store.data_store import DataStore
 from src.platform.platform import Platform
 from src.utils.common import DataCategory, Instrument, Market, OrderSide, DataColumn, TechnicalIndicator, TradingResultColumn
 from src.utils.order import OrderRecord, Order
-
+from src.data_analyzer.trading_record_analyzer import TradingRecordAnalyzer
 class Strategy:
     data_provider_dict: Dict[str, BaseProvider]
     data_store: DataStore
@@ -21,8 +21,9 @@ class Strategy:
     preserved_data: Dict[str, any]
 
     cash: float
-    account_history: List[any]
+    account_history: List[dict]
     holdings: Dict[str, OrderRecord]
+    realized_profit_loss: float
 
     order_record_dict: Dict[str, OrderRecord]
     history_order_by_day: Dict[datetime, List[OrderRecord]]
@@ -54,6 +55,7 @@ class Strategy:
         self.holdings = dict()
         self.order_record_dict = dict()
         self.history_order_by_day = dict()
+        self.realized_profit_loss = 0
 
         self.trading_dates = None
         self.trading_codes = None
@@ -127,6 +129,9 @@ class Strategy:
     def step_end(self, trading_date: datetime):        
         # update book profit loss
         for order_record in self.holdings.values():
+            if order_record.is_covered:
+                continue
+
             source_order = order_record.order
             # get current price
             close_price = self.close_[-1][self.trading_codes.index(order_record.order.code)]
@@ -141,21 +146,24 @@ class Strategy:
                 True,
             )
             net_profit_loss = cover_order.execute_value - cover_order.transaction_cost
+            book_value = net_profit_loss
             book_profit_loss = order_record.net_profit_loss + net_profit_loss
             book_profit_loss_rate = (book_profit_loss / order_record.cost) * 100
             
             order_record.book_price = close_price
+            order_record.book_value = book_value
             order_record.book_profit_loss = book_profit_loss
             order_record.book_profit_loss_rate = book_profit_loss_rate
 
-        total_holding_value = sum([order_record.book_profit_loss for order_record in self.holdings.values()])
-        book_account_profit_loss = (self.cash + total_holding_value) - self.initial_cash
+        book_holding_value = sum([order_record.book_value for order_record in self.holdings.values()])
+        book_account_profit_loss = (self.cash + book_holding_value) - self.initial_cash
         book_account_profit_loss_rate = (book_account_profit_loss / self.initial_cash) * 100
 
         self.account_history.append({
             "date": trading_date,
             "cash": self.cash,
-            "total_holding_value": total_holding_value,
+            "realized_profit_loss": self.realized_profit_loss,
+            "book_holding_value": book_holding_value,
             "book_account_profit_loss": book_account_profit_loss,
             "book_account_profit_loss_rate": book_account_profit_loss_rate,
         })
@@ -198,6 +206,9 @@ class Strategy:
             order_record.is_covered = True
             order_record.net_profit_loss_rate = net_profit_loss_rate
             self.holdings.pop(order_id)
+
+        # record to realized profit loss
+        self.realized_profit_loss += net_profit_loss - (order_record.cost / source_order.volume) * volume
 
         if self.log_level == "DETAIL":
             print((
@@ -294,6 +305,12 @@ class Strategy:
             print("Zero trading record")
             return
 
+        # since we don't know how much cash our strategy need, we set a large number on initial cash
+        # we have to use our real used cash to calculate the return
+        for account in self.account_history:
+            account["cash"] = account["cash"] - self.initial_cash + used_cash
+            account["book_account_profit_loss_rate"] = (account["book_account_profit_loss"] / used_cash) * 100
+
         final_account_info = self.account_history[-1]
         final_profit_loss, final_return = final_account_info["book_account_profit_loss"], final_account_info["book_account_profit_loss_rate"]
         annualized_return = ((1 + final_profit_loss/used_cash) ** (1/len(self.trading_dates)) - 1) * 250 * 100
@@ -330,14 +347,18 @@ class Strategy:
                 ])
 
         # account history
-        account_record_rows = [TradingResultColumn.account_record]
+        account_record_rows = [
+            TradingResultColumn.account_record,
+            [(self.trading_dates[0]-timedelta(days=1)).date(), used_cash, 0, 0, 0, 0], # add an initial record
+        ]
         for account in self.account_history:
             account_record_rows.append([
                 account["date"].date(),
-                account["cash"],
-                account["total_holding_value"],
-                account["book_account_profit_loss"],
-                account["book_account_profit_loss_rate"],
+                f"{account['cash']:.2f}",
+                f"{account['book_holding_value']:.2f}",
+                f"{account['realized_profit_loss']:.2f}",
+                f"{account['book_account_profit_loss']:.2f}",
+                f"{account['book_account_profit_loss_rate']:.2f}",
             ])
 
         if result_dir == None:
@@ -354,3 +375,4 @@ class Strategy:
             writer = csv.writer(fp)
             writer.writerows(account_record_rows)
         
+        TradingRecordAnalyzer.analyze(result_dir)

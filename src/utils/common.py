@@ -131,5 +131,5 @@ class MarketIndexCode(Enum):
 
 
 class TradingResultColumn:
-    trading_record = ["股票", "日期", "股數", "損益", "交易別", "買進日期", "賣出日期", "買進單價", "賣出單價", "報酬率", "持有天數", "平均報酬", "出場理由"]
-    account_record = ["date", "cash", "holding_value", "book_account_value", "book_account_value_rate"]
+    trading_record = ["code", "date", "volume", "profit_loss", "side", "buy_date", "cover_date", "buy_price", "cover_price", "return_rate", "holding_days", "avg_return_rate", "cover_reason"]
+    account_record = ["date", "cash", "holding_value", "realized_profit_loss", "book_account_profit_loss", "book_account_profit_loss_rate"]

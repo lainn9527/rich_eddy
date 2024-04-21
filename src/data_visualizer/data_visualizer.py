@@ -1,10 +1,12 @@
 from datetime import datetime
 from typing import Dict, List
+from pathlib import Path
+from plotly.subplots import make_subplots
+import csv
 import numpy as np
 import pandas as pd
 import pandas_ta as ta
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 from src.strategy.trend_strategy import TrendStrategy
 from src.data_store.data_store import DataStore
@@ -31,6 +33,7 @@ class DataVisualizer:
             instrument=Instrument.Stock,
             data_category=DataCategory.Daily_Price,
             data_columns=[DataColumn.Open, DataColumn.High, DataColumn.Low, DataColumn.Close, DataColumn.Volume],
+            selected_codes=codes,
         )
         signal_one_, mark_ = DataTransformer.get_signal_one(config["parameter"], close_, high_, low_, volume_)
         for code in codes:
@@ -74,8 +77,7 @@ class DataVisualizer:
             DataVisualizer.plot_local_min_max(code, data)
 
 
-    def basic_plot_stock(code, price_df):
-        draw_df = price_df
+    def basic_plot_stock(code, draw_df):
         candlestick = go.Candlestick(
             x=draw_df["date"],
             open=draw_df["open"],
@@ -171,4 +173,69 @@ class DataVisualizer:
             col=1,
         )
 
+        fig.show(config=plotly_config)
+
+
+    def visualize_order_record(record_path: Path):
+        order_record_df = pd.read_csv(record_path, header=0, parse_dates=[1, 5, 6])
+        order_record_df["code"] = order_record_df["code"].astype(str)
+        max_return_codes = order_record_df["return_rate"].groupby(order_record_df["code"]).max().sort_values(ascending=False).index.to_list()
+        # draw top 10 code with high return rate
+        drawing_codes = max_return_codes[:10]
+
+        # draw random 10 code
+        drawing_codes = np.random.choice(order_record_df["code"].unique(), 10).tolist()
+
+        data_store = DataStore()
+        [open_, high_, low_, close_, volume_], trading_dates, trading_codes = data_store.get_data(
+            market=Market.TW,
+            instrument=Instrument.Stock,
+            data_category=DataCategory.Daily_Price,
+            data_columns=[DataColumn.Open, DataColumn.High, DataColumn.Low, DataColumn.Close, DataColumn.Volume],
+            selected_codes=drawing_codes,
+        )
+
+        for code in drawing_codes:
+            code_idx = trading_codes.index(code)
+            data_store = DataStore()
+            code_order_record_df = order_record_df[order_record_df["code"] == code]
+            not_nan_idx = np.argwhere(np.isnan(open_[:, code_idx])==False).reshape(-1)
+            price_df = {
+                "date": trading_dates[not_nan_idx[0]:not_nan_idx[-1]],
+                "open": open_[not_nan_idx[0]:not_nan_idx[-1], code_idx],
+                "high": high_[not_nan_idx[0]:not_nan_idx[-1], code_idx],
+                "low": low_[not_nan_idx[0]:not_nan_idx[-1], code_idx],
+                "close": close_[not_nan_idx[0]:not_nan_idx[-1], code_idx],
+                "volume": volume_[not_nan_idx[0]:not_nan_idx[-1], code_idx],
+            }
+            DataVisualizer.plot_order_record(code, price_df, code_order_record_df)
+
+
+    def plot_order_record(code, price_df: Dict[str, np.ndarray], order_record_df: pd.DataFrame):
+        # plot order record by year
+        fig = DataVisualizer.basic_plot_stock(code, price_df)
+        fig.add_trace(
+            go.Scatter(
+                x=order_record_df["buy_date"],
+                y=order_record_df["buy_price"],
+                name="buy",
+                mode="markers",
+                marker=dict(color="green", size=10),
+            ),
+            secondary_y=False,
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=order_record_df["cover_date"],
+                y=order_record_df["cover_price"],
+                name="sell",
+                mode="markers",
+                marker=dict(color="red", size=10),
+            ),
+            secondary_y=False,
+            row=1,
+            col=1,
+        )
         fig.show(config=plotly_config)

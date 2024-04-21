@@ -33,6 +33,7 @@ class OrderRecord:
 
     cost: float = 0
     book_price: float = 0
+    book_value: float = 0
     book_profit_loss: float = 0
     book_profit_loss_rate: float = 0
     net_profit_loss: float = 0
