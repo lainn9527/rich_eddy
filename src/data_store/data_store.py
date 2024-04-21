@@ -164,6 +164,9 @@ class DataStore:
         if indicator == TechnicalIndicator.SMA:
             # source: (date, code)
             source, time_period = argv[0], argv[1]
+            if time_period <= 1:
+                return source
+
             sma = sliding_window_view(source, time_period, axis=0).mean(axis=2)
             return np.concatenate([np.full((time_period - 1, source.shape[1]), np.nan), sma], axis=0)
 

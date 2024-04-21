@@ -1,13 +1,15 @@
 from datetime import datetime
 from typing import Dict, List
 from collections import OrderedDict
+from pathlib import Path
 import csv
 import numpy as np
+import json
 
 from src.data_provider.base_provider import BaseProvider
 from src.data_store.data_store import DataStore
 from src.platform.platform import Platform
-from src.utils.common import DataCategory, Instrument, Market, OrderSide, DataColumn, TechnicalIndicator
+from src.utils.common import DataCategory, Instrument, Market, OrderSide, DataColumn, TechnicalIndicator, TradingResultColumn
 from src.utils.order import OrderRecord, Order
 
 class Strategy:
@@ -19,7 +21,7 @@ class Strategy:
     preserved_data: Dict[str, any]
 
     cash: float
-    cash_history: List[float]
+    account_history: List[any]
     holdings: Dict[str, OrderRecord]
 
     order_record_dict: Dict[str, OrderRecord]
@@ -43,9 +45,10 @@ class Strategy:
         self.preserved_data = dict()
         self.config = config
         self.log_level = log_level
-
+        
+        self.initial_cash = cash
         self.cash = cash
-        self.cash_history = list()
+        self.account_history = list()
         self.current_trading_date = None
 
         self.holdings = dict()
@@ -107,7 +110,6 @@ class Strategy:
     def step(self, trading_date: datetime):
         # for each iteration, the data will be truncated to the :trading_date
         self.current_trading_date = trading_date
-        self.cash_history.append(self.cash)
 
         # remove out of market holding
         for order_record in list(self.holdings.values()):
@@ -122,13 +124,41 @@ class Strategy:
                 )
 
 
-    
-    def update_book_value(self):
-        for order_id, order_record in self.holdings.items():
-            order = order_record.order
-            current_price = self.data_store.get_data_item(order.market, order.instrument, DataCategory.Daily_Price, DataColumn.Close, order.code, self.current_trading_date)
-            order_record.book_profit_loss = current_price * order_record.open_position
-            order_record.book_profit_loss_rate = order_record.book_profit_loss / (order.execute_price * order.volume)
+    def step_end(self, trading_date: datetime):        
+        # update book profit loss
+        for order_record in self.holdings.values():
+            source_order = order_record.order
+            # get current price
+            close_price = self.close_[-1][self.trading_codes.index(order_record.order.code)]
+            cover_order = self.platform.place_order(
+                source_order.market,
+                source_order.instrument,
+                source_order.code,
+                trading_date,
+                close_price,
+                order_record.open_position,
+                OrderSide.Sell if source_order.side == OrderSide.Buy else OrderSide.Buy,
+                True,
+            )
+            net_profit_loss = cover_order.execute_value - cover_order.transaction_cost
+            book_profit_loss = order_record.net_profit_loss + net_profit_loss
+            book_profit_loss_rate = (book_profit_loss / order_record.cost) * 100
+            
+            order_record.book_price = close_price
+            order_record.book_profit_loss = book_profit_loss
+            order_record.book_profit_loss_rate = book_profit_loss_rate
+
+        total_holding_value = sum([order_record.book_profit_loss for order_record in self.holdings.values()])
+        book_account_profit_loss = (self.cash + total_holding_value) - self.initial_cash
+        book_account_profit_loss_rate = (book_account_profit_loss / self.initial_cash) * 100
+
+        self.account_history.append({
+            "date": trading_date,
+            "cash": self.cash,
+            "total_holding_value": total_holding_value,
+            "book_account_profit_loss": book_account_profit_loss,
+            "book_account_profit_loss_rate": book_account_profit_loss_rate,
+        })
 
 
     def cover_order(self, order_id, price, volume, reason=None):
@@ -217,6 +247,7 @@ class Strategy:
             cost=order.execute_value + order.transaction_cost,
             net_profit_loss=net_profit_loss,
             info=info,
+            book_price=price,
         )
 
         self.holdings[order.order_id] = order_record
@@ -246,33 +277,43 @@ class Strategy:
         return self.trading_codes
 
 
-    def end(self):
-        # clear remaining holdings
-        for order_id in list(self.holdings):
-            order_record = self.holdings[order_id]
+    def clear_holdings(self):
+        for order_record_id in list(self.holdings):
+            order_record = self.holdings[order_record_id]
             self.cover_order(
-                order_id,
-                order_record.order.execute_price,
+                order_record_id,
+                order_record.book_price,
                 order_record.open_position,
                 'end'
             )
-        used_cash = self.cash_history[0] - min(self.cash_history)
-        net_profit_loss = self.cash_history[-1] - self.cash_history[0]
-        total_return = net_profit_loss / used_cash * 100
-        annualized_return = ((1 + net_profit_loss/used_cash) ** (1/len(self.trading_dates)) - 1) * 250 * 100
 
-        print(f"Lowest cash: {min(self.cash_history)}")
-        print(f"Net Profit Loss: {net_profit_loss:2f}")
-        print(f"Total Return: {total_return:.2f}%")
+
+    def end(self, result_dir: Path):
+        used_cash = self.initial_cash - min([account["cash"] for account in self.account_history])
+        if used_cash == 0:
+            print("Zero trading record")
+            return
+
+        final_account_info = self.account_history[-1]
+        final_profit_loss, final_return = final_account_info["book_account_profit_loss"], final_account_info["book_account_profit_loss_rate"]
+        annualized_return = ((1 + final_profit_loss/used_cash) ** (1/len(self.trading_dates)) - 1) * 250 * 100
+
+        print(f"Used cash: {used_cash}")
+        print(f"Net Profit Loss: {final_profit_loss:2f}")
+        print(f"Total Return: {final_return:.2f}%")
         print(f"Annualized Return: {annualized_return:.2f}%")
+        print(f"Trading records: {len(self.order_record_dict)}")
 
-        # write to csv
+        # clear order
+        self.clear_holdings()
+
+        # write order record
         order_records = list(self.order_record_dict.values())
         sorted_order_records = sorted(order_records, key=lambda x: x.order.execute_time)
-        data_rows = [["股票", "日期", "股數", "損益", "交易別", "買進日期", "賣出日期", "買進單價", "賣出單價", "報酬率", "持有天數", "平均報酬", "出場理由"]]
+        order_record_rows = [TradingResultColumn.trading_record]
         for order_record in sorted_order_records:
             for cover_order in order_record.cover_order:
-                data_rows.append([
+                order_record_rows.append([
                     order_record.order.code,
                     cover_order.execute_time.date(),
                     order_record.order.volume,
@@ -287,7 +328,29 @@ class Strategy:
                     f"{order_record.net_profit_loss_rate / ((cover_order.execute_time - order_record.order.execute_time).days+1):.2f}",
                     order_record.cover_reason,
                 ])
-        with open("result.csv", "w") as fp:
+
+        # account history
+        account_record_rows = [TradingResultColumn.account_record]
+        for account in self.account_history:
+            account_record_rows.append([
+                account["date"].date(),
+                account["cash"],
+                account["total_holding_value"],
+                account["book_account_profit_loss"],
+                account["book_account_profit_loss_rate"],
+            ])
+
+        if result_dir == None:
+            result_dir = Path("result") / datetime.now().strftime("%Y%m%d_%H%M%S")
+        result_dir.mkdir(parents=True, exist_ok=True)
+        with open(result_dir / "config.json", "w") as fp:
+            json.dump(self.config, fp)
+
+        with open(result_dir / "order_record.csv", "w") as fp:
             writer = csv.writer(fp)
-            writer.writerows(data_rows)
-            
+            writer.writerows(order_record_rows)
+        
+        with open(result_dir / "account_record.csv", "w") as fp:
+            writer = csv.writer(fp)
+            writer.writerows(account_record_rows)
+        

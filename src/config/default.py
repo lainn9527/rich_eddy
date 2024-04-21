@@ -30,14 +30,11 @@ config = {
         },
     ],
     "parameter": {
-        "meta": {
-            "from_year": 2010,
-        },
         "sma_breakthrough_alignment_filter": {
             "week_half_month_diff_ratio": 0.03,
             "half_month_month_diff_ratio": 0.03,
         },
-        "recurring_eps_filter": {"amplitudes": [0.05]},
+        # "recurring_eps_filter": {"amplitudes": [0.05]},
         "strategy_one": {
             "up_min_ratio": 0.45,
             "up_time_window": 60,
@@ -49,10 +46,11 @@ config = {
             "volume_avg_time_window": 120,
             "volume_avg_threshold": 200,
 
-            "holding_days": 10,
+            "holding_days": 5,
             "stop_loss_ratio": 0.037,
 
-            "rs_threshold": 0.99,
+            "rs_threshold": 90,
+            "rs_sma_period": 3
         },
     }
 }

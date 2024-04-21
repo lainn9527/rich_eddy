@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Dict
+from pathlib import Path
 
 from src.broker.broker import Broker
 from src.data_provider.base_provider import BaseProvider
@@ -26,7 +27,8 @@ class Platform:
         self,
         strategy,
         start_date: datetime = None,
-        end_date: datetime = None
+        end_date: datetime = None,
+        result_path: Path = None,
     ) -> None:
         strategy.prepare_data(start_date, end_date)
         strategy.ensure_data()
@@ -35,8 +37,10 @@ class Platform:
         for trading_date in trading_dates:
             strategy.step_data(trading_date)
             strategy.step(trading_date)
+            strategy.step_end(trading_date)
+
         
-        strategy.end()
+        strategy.end(result_path)
 
 
     def place_order(

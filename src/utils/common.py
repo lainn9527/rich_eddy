@@ -128,3 +128,8 @@ class MarketIndexCode(Enum):
     SP500 = "sp500"
     NASDAQ = "nasdaq"
     DJI = "dji"
+
+
+class TradingResultColumn:
+    trading_record = ["股票", "日期", "股數", "損益", "交易別", "買進日期", "賣出日期", "買進單價", "賣出單價", "報酬率", "持有天數", "平均報酬", "出場理由"]
+    account_record = ["date", "cash", "holding_value", "book_account_value", "book_account_value_rate"]
