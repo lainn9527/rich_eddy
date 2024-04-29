@@ -334,6 +334,7 @@ class Strategy:
                     order_record.order.code,
                     cover_order.execute_time.date(),
                     order_record.order.volume,
+                    order_record.cost,
                     f"{order_record.net_profit_loss:.2f}",
                     order_record.order.side,
                     order_record.order.execute_time.date(),
@@ -363,6 +364,8 @@ class Strategy:
 
         if result_dir == None:
             result_dir = Path("result") / datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        result = [result_dir.parts[-1], int(used_cash), int(final_profit_loss), f"{final_return:.2f}%", f"{annualized_return:.2f}%", len(self.order_record_dict)]
         result_dir.mkdir(parents=True, exist_ok=True)
         with open(result_dir / "config.json", "w") as fp:
             json.dump(self.config, fp)
@@ -375,4 +378,7 @@ class Strategy:
             writer = csv.writer(fp)
             writer.writerows(account_record_rows)
         
-        TradingRecordAnalyzer.analyze(result_dir)
+        result.extend(TradingRecordAnalyzer.analyze(result_dir))
+        with open(result_dir.parent / "result.csv", "a+") as fp:
+            writer = csv.writer(fp)
+            writer.writerow(result)

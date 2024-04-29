@@ -360,7 +360,7 @@ class BaseProvider:
             if target_date in date_idx_map:
                 np_array_row = np_array[date_idx_map[target_date]]
                 # use np_array_row to update row
-                new_row = np.array([np_array_row[i] if np_array_row[i] != np.nan else row[i] for i in range(len(new_row))])
+                new_row = np.array([np_array_row[i] if ~np.isnan(np_array_row[i]) else new_row[i] for i in range(len(new_row))])
 
             target_np_array[i] = new_row
 
