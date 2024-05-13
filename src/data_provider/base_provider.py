@@ -282,11 +282,11 @@ class BaseProvider:
             np_array, dates = np_array[start_idx:], dates[start_idx:]
 
         if end_date != None:
-            if dates[-1] < end_date:
+            if dates[-1] <= end_date:
                 end_date = dates[-1]
             if end_date not in dates:
                 end_date = next(date for date in dates if date >= end_date)
-            end_idx = dates.index(end_date)
+            end_idx = dates.index(end_date) + 1
             np_array, dates = np_array[:end_idx], dates[:end_idx]
 
         return np_array, dates, codes
