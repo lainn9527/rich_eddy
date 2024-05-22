@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 
-
 path_root = Path(__file__).parents[2]
 sys.path.append(str(path_root))
 import csv
@@ -65,7 +64,7 @@ if __name__ == "__main__":
     # data_summary("Max ratio", all_max_ratios)
     # data_summary("Min ratio", all_min_ratios)
 
-    # # Group data together
+    # Group data together
     # fig = ff.create_distplot(
     #     [all_hold_ratios, all_max_ratios, all_min_ratios],
     #     ["signal hold", "signal max", "signal min"],

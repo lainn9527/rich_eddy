@@ -38,53 +38,55 @@ class TrendStrategy(Strategy):
             instrument=Instrument.StockIndex,
             data_category=DataCategory.Market_Index,
             data_columns=[DataColumn.Close],
-            selected_codes=['Y9999'],
+            selected_codes=["Y9999"],
             start_date=data_start_date,
             end_date=end_date,
         )
 
         self.relative_strength_ = DataTransformer.get_relative_strength(codes, self.close_, market_index_)
-        self.relative_strength_sma_5_ = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.relative_strength_, 5)
-
+        self.relative_strength_sma_ = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.relative_strength_, self.config["strategy_one"]["rs_sma_period"])
+        
         # expected to have the same shape as close
-        # self.eps_ = self.data_store.get_aligned_data(target_dates=dates, target_codes=codes, market=Market.TW, instrument=Instrument.Stock, data_category=DataCategory.Finance_Report, data_columns=[DataColumn.EPS])
+        # self.eps_, self.recurring_eps_ = self.data_store.get_aligned_data(target_dates=dates, target_codes=codes, market=Market.TW, instrument=Instrument.Stock, data_category=DataCategory.Finance_Report, data_columns=[DataColumn.EPS, DataColumn.Recurring_EPS])
 
         # local min & max array
-        self.signal_one_, _ = DataTransformer.get_signal_one(self.config, self.close_, self.low_, self.high_, self.volume_)
+        self.signal_one_, _ = DataTransformer.get_signal_one(self.config, self.close_, self.low_, self.high_, self.volume_, self.relative_strength_sma_)
         self.trading_dates = self.slice_data(dates, start_date, end_date)
         self.trading_codes = codes
 
+
     def step(self, trading_date: datetime):
         super().step(trading_date)
-        strategy_one_config = self.config['strategy_one']
-        holding_days = strategy_one_config['holding_days']
-        stop_loss_ratio = strategy_one_config['stop_loss_ratio']
+        strategy_one_config = self.config["strategy_one"]
+        holding_days = strategy_one_config["holding_days"]
+        stop_loss_ratio = strategy_one_config["stop_loss_ratio"]
+        rs_threshold = strategy_one_config["rs_threshold"]
 
         codes = self.get_trading_codes()
-        open_price, high_price, low_price, close_price, signal_one = self.open_[-1], self.high_[-1], self.low_[-1], self.close_[-1], self.signal_one_[-1]
+        open_price, high_price, low_price, close_price, signal_one, relative_strength_sma_ = self.open_[-1], self.high_[-1], self.low_[-1], self.close_[-1], self.signal_one_[-1], self.relative_strength_sma_[-1]
         
         # adjust position
         for order_record in list(self.holdings.values()):
             code = order_record.order.code
             code_idx = codes.index(code)
-            stop_loss_price = order_record.info['stop_loss_price']
+            stop_loss_price = order_record.info["stop_loss_price"]
 
             if close_price[code_idx] < stop_loss_price:
                 self.cover_order(
                     order_record.order.order_id,
                     stop_loss_price,
                     order_record.order.volume,
-                    'stop_loss'
+                    "stop_loss"
                 )
                 continue
 
-            order_record.info['holding_days'] += 1
-            if order_record.info['holding_days'] >= holding_days:
+            order_record.info["holding_days"] += 1
+            if order_record.info["holding_days"] >= holding_days:
                 self.cover_order(
                     order_record.order.order_id,
                     close_price[code_idx],
                     order_record.order.volume,
-                    'holding_days'
+                    "holding_days"
                 )
         
         fixed_cash = 100000
@@ -92,6 +94,29 @@ class TrendStrategy(Strategy):
         for idx, signal in enumerate(signal_one):
             if signal == 0:
                 continue
+            
+            # filter rs threshold
+            if relative_strength_sma_[idx] < rs_threshold:
+                continue
+            
+            # add volume by rs
+            # if relative_strength_sma_5[idx] >= 0.95:
+            #     fixed_cash *= 1.8
+            # elif relative_strength_sma_5[idx] >= 0.9:
+            #     fixed_cash *= 1.2
+            # elif relative_strength_sma_4[idx] >= 0.95:
+            #     fixed_cash *= 1.4
+            
+
+
+            # # filter eps
+            # if not (self.recurring_eps_[-1, idx] >= self.recurring_eps_[-120:, idx]).all():
+            #     continue
+            
+            # min_eps = self.recurring_eps_[-120:, idx].min()
+            # if (self.recurring_eps_[-1, idx] - self.recurring_eps_[-120:, idx].min()) / np.abs(min_eps) < 0.1:
+            #     continue
+
 
             code = codes[idx]
             price = close_price[idx]

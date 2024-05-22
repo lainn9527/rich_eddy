@@ -99,6 +99,8 @@ class DataTransformer:
         high_array: np.ndarray,
         low_array: np.ndarray,
         volume_array: np.ndarray,
+        relative_strength_sma_array: np.ndarray,
+        dates: List[datetime] = None,
     ):
         strategy_one_config = config["strategy_one"]
         volume_avg_time_window = strategy_one_config["volume_avg_time_window"]
@@ -109,18 +111,22 @@ class DataTransformer:
         down_max_time_window = strategy_one_config["down_max_time_window"]
         consolidation_time_window = strategy_one_config["consolidation_time_window"]
         breakthrough_fuzzy = strategy_one_config["breakthrough_fuzzy"]
+        rs_threshold = strategy_one_config["rs_threshold"]
 
         local_min_array, local_max_array = DataTransformer.get_middle_ex(low_array, high_array)
         mark_array = np.full_like(close_array, 0, dtype=int)
         signal_array = np.full_like(close_array, 0, dtype=int)
         for code_idx in range(local_max_array.shape[1]):
-            local_min, local_max, close, high, low, volume = local_min_array[:, code_idx], local_max_array[:, code_idx], close_array[:, code_idx], high_array[:, code_idx], low_array[:, code_idx], volume_array[:, code_idx]
-            local_min_idx_list, local_max_idx_list = np.argwhere(local_min == True).reshape(-1), np.argwhere(local_max == True).reshape(-1)
+            local_min, local_max, close, high, low, volume, relative_strength_sma = local_min_array[:, code_idx], local_max_array[:, code_idx], close_array[:, code_idx], high_array[:, code_idx], low_array[:, code_idx], volume_array[:, code_idx], relative_strength_sma_array[:, code_idx]
+            all_local_min_idx_list, all_local_max_idx_list = np.argwhere(local_min == True).reshape(-1), np.argwhere(local_max == True).reshape(-1)
             
             # > up_time_window (上升一段時間)
-            local_min_idx_list = local_min_idx_list[local_min_idx_list > up_time_window]
-            local_max_idx_list = local_max_idx_list[local_max_idx_list > up_time_window]
-            for local_max_idx in local_max_idx_list:
+            local_min_idx_list = all_local_min_idx_list[all_local_min_idx_list > up_time_window]
+            local_max_idx_list = all_local_max_idx_list[all_local_max_idx_list > up_time_window]
+            for i, local_max_idx in enumerate(local_max_idx_list):
+                # if i == 218 - (all_local_max_idx_list <= up_time_window).sum():
+                    # print("debug")
+
                 local_max_value = high[local_max_idx]
                 prev_low = low[local_max_idx - up_time_window : local_max_idx + 1].min()
                 
@@ -141,7 +147,7 @@ class DataTransformer:
                 else:
                     next_low_idx = next_low_array[0]
                     next_low_value = low[next_low_idx]
-                
+
                 # 下降超過最大幅度則跳過
                 if (local_max_value - next_low_value) / local_max_value > down_max_ratio:
                     continue
@@ -155,6 +161,9 @@ class DataTransformer:
 
                 breakthrough_point_idx = breakthrough_points[0]
                 if breakthrough_point_idx - local_max_idx < consolidation_time_window:
+                    continue
+
+                if relative_strength_sma[breakthrough_point_idx] < rs_threshold:
                     continue
 
                 mark_array[local_max_idx, code_idx] = breakthrough_point_idx

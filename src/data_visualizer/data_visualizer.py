@@ -33,9 +33,23 @@ class DataVisualizer:
             instrument=Instrument.Stock,
             data_category=DataCategory.Daily_Price,
             data_columns=[DataColumn.Open, DataColumn.High, DataColumn.Low, DataColumn.Close, DataColumn.Volume],
-            selected_codes=codes,
+            # selected_codes=codes,
         )
-        signal_one_, mark_ = DataTransformer.get_signal_one(config["parameter"], close_, high_, low_, volume_)
+
+        market_index_, c, t = data_store.get_data(
+            market=Market.TW,
+            instrument=Instrument.StockIndex,
+            data_category=DataCategory.Market_Index,
+            data_columns=[DataColumn.Close],
+            selected_codes=["Y9999"],
+            start_date=trading_dates[0],
+            end_date=trading_dates[-1],
+        )
+
+        relative_strength_ = DataTransformer.get_relative_strength(codes, close_, market_index_)
+        relative_strength_sma_ = data_store.get_technical_indicator(TechnicalIndicator.SMA, relative_strength_, config["parameter"]["strategy_one"]["rs_sma_period"])
+
+        signal_one_, mark_ = DataTransformer.get_signal_one(config["parameter"], close_, high_, low_, volume_, relative_strength_sma_, trading_dates)
         for code in codes:
             code_idx = trading_codes.index(code)
             data = {
@@ -54,12 +68,12 @@ class DataVisualizer:
     def visualize_local_min_max(codes: List[str]):
         data_store = DataStore(codes=codes)
         global trading_codes, trading_dates
-
         [open_, high_, low_, close_, volume_], trading_dates, trading_codes = data_store.get_data(
             market=Market.TW,
             instrument=Instrument.Stock,
             data_category=DataCategory.Daily_Price,
             data_columns=[DataColumn.Open, DataColumn.High, DataColumn.Low, DataColumn.Close, DataColumn.Volume],
+            selected_codes=codes,
         )
         local_min_, local_max_ = DataTransformer.get_middle_ex(low_, high_)
         for code in codes:
@@ -167,6 +181,7 @@ class DataVisualizer:
                 name="local_max",
                 mode="markers",
                 marker=dict(color="purple", size=10),
+                text=[i for i in range(draw_df['local_max'].sum())],
             ),
             secondary_y=False,
             row=1,
