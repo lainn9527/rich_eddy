@@ -1,15 +1,29 @@
 from pathlib import Path
 from datetime import datetime
+import numpy as np
+from functools import wraps
+from pyinstrument import Profiler
 
 import sys
 import talib
-import numpy as np
-
 from src.data_store.data_store import DataStore
 from src.strategy.trend_strategy import TrendStrategy
 from src.platform.platform import Platform
 from src.broker.broker import Broker
 from src.config.default import config, tuned_config
+
+def time_profiler(func):
+    # only for local development
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        profiler = Profiler()
+        profiler.start()
+        result = func(*args, **kwargs)
+        profiler.stop()
+        print(profiler.output_text(unicode=True, color=True))
+        return result
+
+    return wrapper
 
 def random_combinations(config, n = 5):
     import random
@@ -63,6 +77,7 @@ def tune():
         strategy = TrendStrategy(platform, data_store, cash=cash, config=new_config)
         platform.run(strategy, start_date, end_date, result_path)
 
+@time_profiler
 def main():
     start_date = datetime(2022, 11, 18)
     start_date = datetime(2011, 11, 18)
@@ -74,6 +89,7 @@ def main():
     result_path = Path("result") / f"{sys.argv[1]}" if len(sys.argv) > 1 else None
     strategy = TrendStrategy(platform, data_store, cash=cash, config=tuned_config)
     platform.run(strategy, start_date, end_date, result_path)
+
 
 if __name__ == "__main__":
     print(datetime.now())

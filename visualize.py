@@ -16,7 +16,7 @@ def random_get_codes(n):
 def main():
     codes = ["2230"]
     codes = ["2204", "2230", "3017", "3376", "3515"]
-    codes = random_get_codes(10)
+    codes = ["2388"]
     # DataVisualizer.visualize_local_min_max(codes)
     DataVisualizer.visualize_signal_one(codes)
     # DataVisualizer.visualize_order_record(Path("result/20240421_232355/order_record.csv"))

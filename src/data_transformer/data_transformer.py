@@ -3,6 +3,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 from typing import List
 import numpy as np
 import json
+from src.utils.redis_client import RedisClient
 
 class DataTransformer:
     def get_local_ex(low: np.ndarray, high: np.ndarray):
@@ -116,7 +117,12 @@ class DataTransformer:
         local_min_array, local_max_array = DataTransformer.get_middle_ex(low_array, high_array)
         mark_array = np.full_like(close_array, 0, dtype=int)
         signal_array = np.full_like(close_array, 0, dtype=int)
+
+        debug_code = 405
+        debug_dates = -1
         for code_idx in range(local_max_array.shape[1]):
+            if code_idx == debug_code:
+                print("debug")
             local_min, local_max, close, high, low, volume, relative_strength_sma = local_min_array[:, code_idx], local_max_array[:, code_idx], close_array[:, code_idx], high_array[:, code_idx], low_array[:, code_idx], volume_array[:, code_idx], relative_strength_sma_array[:, code_idx]
             all_local_min_idx_list, all_local_max_idx_list = np.argwhere(local_min == True).reshape(-1), np.argwhere(local_max == True).reshape(-1)
             
@@ -124,8 +130,8 @@ class DataTransformer:
             local_min_idx_list = all_local_min_idx_list[all_local_min_idx_list > up_time_window]
             local_max_idx_list = all_local_max_idx_list[all_local_max_idx_list > up_time_window]
             for i, local_max_idx in enumerate(local_max_idx_list):
-                # if i == 218 - (all_local_max_idx_list <= up_time_window).sum():
-                    # print("debug")
+                if local_max_idx == debug_dates:
+                    print("debug")
 
                 local_max_value = high[local_max_idx]
                 prev_low = low[local_max_idx - up_time_window : local_max_idx + 1].min()
@@ -154,15 +160,15 @@ class DataTransformer:
 
                 # 盤整 & 突破
                 breakthrough_idx = next_low_idx
-                breakthrough_points = np.argwhere(close >= local_max_value)
+                breakthrough_points = np.argwhere(close >= local_max_value*(1.03))
                 breakthrough_points = breakthrough_points[breakthrough_points >= breakthrough_idx]
                 if len(breakthrough_points) == 0:
                     break
-
+                
                 breakthrough_point_idx = breakthrough_points[0]
                 if breakthrough_point_idx - local_max_idx < consolidation_time_window:
                     continue
-
+                
                 if relative_strength_sma[breakthrough_point_idx] < rs_threshold:
                     continue
 
@@ -172,7 +178,12 @@ class DataTransformer:
         return signal_array, mark_array
 
 
-    def get_relative_strength(codes: List[str], close: np.ndarray, market_index_close: np.ndarray, time_period: int = 1):
+    def get_relative_strength(close: np.ndarray, market_index_close: np.ndarray, time_period: int = 1):
+        cache_key = f"relative_strength_shape_{close.shape[0]}_{close.shape[1]}_time_period_{time_period}"
+        
+        if RedisClient.has(cache_key):
+            return RedisClient.get_np_array(cache_key)
+
         close_change = np.diff(close, n=time_period, axis=0) / close[:-time_period]
         market_index_close_change = np.diff(market_index_close, n=time_period, axis=0) / market_index_close[:-time_period]
         relative_strength_rate = close_change / market_index_close_change
@@ -184,5 +195,8 @@ class DataTransformer:
             pct = 99 + (i*0.1)
             px = np.nanpercentile(relative_strength_rate, pct, axis=1)
             relative_strength[relative_strength_rate > px.reshape(-1, 1)] = pct
-            
-        return np.concatenate([np.full((time_period, close.shape[1]), np.nan), relative_strength], axis=0)
+
+        value = np.concatenate([np.full((time_period, close.shape[1]), np.nan), relative_strength], axis=0)
+        RedisClient.set_np_array(cache_key, value)
+
+        return value

@@ -12,7 +12,7 @@ from src.strategy.trend_strategy import TrendStrategy
 from src.data_store.data_store import DataStore
 from src.utils.common import DataCategory, Instrument, Market, OrderSide, DataColumn, TechnicalIndicator
 from src.data_transformer.data_transformer import DataTransformer
-from src.config.default import config
+from src.config.default import config, tuned_config
 
 plotly_config = dict(
     {
@@ -26,6 +26,9 @@ class DataVisualizer:
         pass
 
     def visualize_signal_one(codes: List[str]):
+        start_date = datetime(2021, 5, 18)
+        end_date = datetime(2024, 3, 1)
+
         data_store = DataStore(codes=codes)
         global trading_codes, trading_dates
         [open_, high_, low_, close_, volume_], trading_dates, trading_codes = data_store.get_data(
@@ -33,6 +36,8 @@ class DataVisualizer:
             instrument=Instrument.Stock,
             data_category=DataCategory.Daily_Price,
             data_columns=[DataColumn.Open, DataColumn.High, DataColumn.Low, DataColumn.Close, DataColumn.Volume],
+            start_date=start_date,
+            end_date=end_date
             # selected_codes=codes,
         )
 
@@ -49,7 +54,7 @@ class DataVisualizer:
         relative_strength_ = DataTransformer.get_relative_strength(codes, close_, market_index_)
         relative_strength_sma_ = data_store.get_technical_indicator(TechnicalIndicator.SMA, relative_strength_, config["parameter"]["strategy_one"]["rs_sma_period"])
 
-        signal_one_, mark_ = DataTransformer.get_signal_one(config["parameter"], close_, high_, low_, volume_, relative_strength_sma_, trading_dates)
+        signal_one_, mark_ = DataTransformer.get_signal_one(tuned_config, close_, high_, low_, volume_, relative_strength_sma_, trading_dates)
         for code in codes:
             code_idx = trading_codes.index(code)
             data = {

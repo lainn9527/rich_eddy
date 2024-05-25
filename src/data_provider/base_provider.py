@@ -9,6 +9,7 @@ import numpy as np
 
 from src.utils.common import DataCategory, DataColumn, Instrument, Market
 from src.utils.utils import split_payload
+from src.utils.redis_client import RedisClient
 
 def task(payload):
     date_data_dir, year_dirs = payload
@@ -87,6 +88,11 @@ class BaseProvider:
 
     def load_date_data(self, start_year: int = None, end_year: int = None):
         year_dirs = sorted(os.listdir(self.date_data_dir))
+        cache_key = f"data_{self.get_data_provider_id()}"
+
+        if RedisClient.has(cache_key):
+            self.date_data = RedisClient.get_json(cache_key)
+            return
 
         if start_year != None:
             year_dirs = list(filter(lambda x: int(x) >= start_year, year_dirs))
@@ -104,10 +110,9 @@ class BaseProvider:
                 file_date = datetime.strptime(file_name.split(".")[0], "%Y-%m-%d")
                 with open(file_path) as fp:
                     self.date_data[file_date.isoformat()] = list(csv.reader(fp))[1:]  # skip column row
-
-        print(
-            f"load data from {start_year} to {end_year} done, loaded {len(self.date_data)} date data"
-        )
+        
+        print(f"load data from {start_year} to {end_year} done, loaded {len(self.date_data)} date data")
+        RedisClient.set_json(cache_key, self.date_data)
 
 
     def load_date_data_parallel_task(self, payload):
@@ -125,6 +130,7 @@ class BaseProvider:
                     date_data[file_date.isoformat()] = list(csv.reader(fp))[1:]  # skip column row
         
         return date_data
+
 
     def load_date_data_parallel(self, start_year: int = None, end_year: int = None):
         year_dirs = sorted(os.listdir(self.date_data_dir))
@@ -145,7 +151,7 @@ class BaseProvider:
             self.date_data.update(result)
 
         print(f"load data from {start_year} to {end_year} done, loaded {len(self.date_data)} date data")
-    
+
 
     def load_data_by_codes(self, codes = None):
         if codes is None:
@@ -157,7 +163,6 @@ class BaseProvider:
             with open(self.code_data_dir / f"{code}.csv") as fp:
                 pv = list(csv.reader(fp))[1:]
                 code_data[code] = pv
-        
 
         print(f"{len(codes)} code data loaded")
         self.date_data = self.code_data_to_date_data(code_data)
@@ -189,55 +194,52 @@ class BaseProvider:
                 self.meta_data[code] = f"{name} {code} {market_type} {industry}"
 
 
-    def build_column_np_array(self, codes: List[str] = None, start_date = None, end_date = None):
-        if codes != None:
-            self.load_data_by_codes(codes)
+    def build_column_np_array(self, start_date = None, end_date = None):
+        # if codes != None:
+            # self.load_data_by_codes(codes)
 
-        if self.is_date_data_loaded() == False:
-            start_date_year = start_date.year if start_date != None else None
-            end_date_year = end_date.year if end_date != None else None
-            self.load_date_data(start_date_year, end_date_year)
+        # read from cache first
+        column_names =  [column_name for column_name in self.column_names if column_name not in [DataColumn.Date, DataColumn.Code]]
+        build_column_names = []
+        for idx, column in enumerate(column_names):
+            cache_key = f"np_array_{self.get_data_provider_id()}_{column}"
+            if RedisClient.has(cache_key):
+                self.np_array_column[column] = RedisClient.get_np_array(cache_key)
+            else:
+                build_column_names.append(column)
 
-        all_trading_date = self.get_all_dates()
-        all_codes = self.get_all_codes()
+        if len(build_column_names) == 0:
+            return
 
         # x: date, y: code
-        build_column_idx = []
-        code_idx = np.nan
-        np_array_column = dict()
-        for idx, column in enumerate(self.column_names):
-            if column == DataColumn.Date:
-                continue
-            if column == DataColumn.Code:
-                code_idx = idx
-                continue
-
-            np_array_column[column] = np.full(
-                (len(all_trading_date), len(all_codes)), np.nan
-            )
-            build_column_idx.append(idx)
-
+        self.load_date_data()
+        all_trading_date = self.get_all_dates()
+        all_codes = self.get_all_codes()
+        for column in build_column_names:
+            self.np_array_column[column] = np.full((len(all_trading_date), len(all_codes)), np.nan)
+        
         # build code: idx map
         code_idx_map = {code: idx for idx, code in enumerate(all_codes)}
-
         for i, trading_date in enumerate(all_trading_date):
             date_data = self.get_date_data(trading_date)
             for row in date_data:
                 # replace empty value with np.nan
                 row = [np.nan if x == "" else x for x in row]
                 code = row[0]
-                for idx in build_column_idx:
+                for build_column_name in build_column_names:
+                    idx = self.column_names.index(build_column_name)
                     value = row[idx]
-                    column = self.column_names[idx]
                     code_idx = code_idx_map[code]
-                    np_array_column[column][i][code_idx] = value
+                    self.np_array_column[build_column_name][i][code_idx] = value
 
-        self.np_array_column = np_array_column
+        for build_column in build_column_names:
+            np_array_cache_key = f"np_array_{self.get_data_provider_id()}_{build_column}"
+            RedisClient.set_np_array(np_array_cache_key, self.np_array_column[build_column])
 
 
     def get_date_data(self, date = None):
         if self.date_data == {}:
-            self.load_date_data()
+            raise ValueError("please load date data first")
 
         if date != None:
             return self.date_data[date.isoformat()]
@@ -258,7 +260,7 @@ class BaseProvider:
         if codes == None:
             return {}
         
-        column_np_array, _, codes = self.get_np_array(column, codes)
+        column_np_array, _, codes = self.get_np_array(column)
         code_data = {}
         for code in codes:
             code_idx = codes.index(code)
@@ -267,9 +269,9 @@ class BaseProvider:
         return code_data
 
 
-    def get_np_array(self, column, codes = None, start_date = None, end_date = None):
+    def get_np_array(self, column, start_date = None, end_date = None):
         if self.np_array_column == {}:
-            self.build_column_np_array(codes, start_date, end_date)
+            self.build_column_np_array(start_date, end_date)
 
         np_array = self.np_array_column[column]
         dates = self.get_all_dates()
@@ -308,27 +310,44 @@ class BaseProvider:
 
 
     def get_all_dates(self):
-        if self.all_date == None:
-            date_data = self.get_date_data()
-            self.all_date = sorted(
-                [datetime.fromisoformat(date_string) for date_string in list(date_data.keys())]
-            )
+        if self.all_date != None:
+            return self.all_date
+        
+        # get from cache
+        cache_key = f"all_date_{self.get_data_provider_id()}"
+        if RedisClient.has(cache_key):
+            self.all_date = RedisClient.get_datetime_array(cache_key)
+            return self.all_date
+
+        # get from date data
+        date_data = self.get_date_data()
+        self.all_date = sorted([datetime.fromisoformat(date_string) for date_string in list(date_data.keys())])
+        RedisClient.set_datetime_array(cache_key, self.all_date)
 
         return self.all_date
 
 
     def get_all_codes(self):
-        if self.all_code == None:
-            date_data = self.get_date_data()
-            code_set = set()
+        if self.all_code != None:
+            return self.all_code
 
-            for data in date_data.values():
-                for row in data:
-                    code = row[0]
-                    code_set.add(code)
-
-            self.all_code = sorted(list(code_set))
+        # get from cache
+        cache_key = f"all_code_{self.get_data_provider_id()}"
+        if RedisClient.has(cache_key):
+            self.all_code = RedisClient.get_json(cache_key)
+            return self.all_code
         
+        # get from date data
+        date_data = self.get_date_data()
+        code_set = set()
+
+        for data in date_data.values():
+            for row in data:
+                code = row[0]
+                code_set.add(code)
+
+        self.all_code = sorted(list(code_set))
+        RedisClient.set_json(cache_key, self.all_code)
         return self.all_code
   
     
@@ -375,3 +394,7 @@ class BaseProvider:
             codes = [codes]
 
         return [self.meta_data[code] for code in codes]
+
+
+    def get_data_provider_id(self):
+        return f"{self.market.value}_{self.instrument.value}_{self.data_category.value}"

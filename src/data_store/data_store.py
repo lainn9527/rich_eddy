@@ -57,12 +57,14 @@ class DataStore:
         for data_column in data_columns:
             data_id = self.build_data_id(market, instrument, data_category, data_column)
             if data_id in self.track_data:
-                np_array, dates, codes =  self.track_data[data_id]["data"], self.track_data[data_id]["index"], self.track_data[data_id]["column"]
+                np_array = self.track_data[data_id]["data"]
+                dates = self.track_data[data_id]["index"]
+                codes = self.track_data[data_id]["column"]
                 np_arrays.append(np_array)
                 continue
 
             data_provider = self.get_data_provider(data_id)
-            np_array, dates, codes = data_provider.get_np_array(data_column, selected_codes, start_date, end_date)
+            np_array, dates, codes = data_provider.get_np_array(data_column, start_date, end_date)
             np_arrays.append(np_array)
 
             self.track_data[data_id] = {
