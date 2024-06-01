@@ -2,11 +2,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict
 from pathlib import Path
+import json
+
 
 from src.broker.broker import Broker
 from src.data_provider.base_provider import BaseProvider
 from src.utils.common import Instrument, Market, OrderSide
 from src.utils.order import Order
+from src.utils.utils import NumpyEncoder
 
 class DataProvider(Enum):
     OpenPrice = "open_price"
@@ -28,9 +31,10 @@ class Platform:
         strategy,
         start_date: datetime = None,
         end_date: datetime = None,
-        result_path: Path = None,
+        result_path: Path = Path("result") / datetime.now().strftime("%Y%m%d_%H%M%S"),
+        write_analyze_material: bool = False,
     ) -> None:
-        strategy.prepare_data(start_date, end_date)
+        analyze_material = strategy.prepare_data(start_date, end_date)
         strategy.ensure_data()
         trading_dates = strategy.get_trading_dates()
 
@@ -39,8 +43,11 @@ class Platform:
             strategy.step(trading_date)
             strategy.step_end(trading_date)
 
-        
         strategy.end(result_path)
+
+        if write_analyze_material and analyze_material is not None:
+            with open(result_path / "analyze_material.json", "w") as fp:
+                json.dump(analyze_material, fp, cls=NumpyEncoder)
 
 
     def place_order(

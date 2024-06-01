@@ -8,8 +8,10 @@ from src.utils.redis_client import RedisClient
 class DataTransformer:
     def get_local_ex(low: np.ndarray, high: np.ndarray):
         argmin_array = sliding_window_view(low, 3, axis=0).argmin(axis=2)
+        
         # item == 1 means it is a local minimum (high-low-high)
         min_array = argmin_array == 1
+        
         # the first row can not be a local minimum, the last row can
         min_array = np.concatenate([
             np.full((1, low.shape[1]), False),
@@ -24,6 +26,7 @@ class DataTransformer:
             max_array,
             np.reshape(argmax_array[-1] == 2, (1, high.shape[1])),
         ], axis=0)
+
 
         # # remove noise
         # prev_signal = np.full((low.shape[1]), 0.0) # 0: no signal, 1: max, 2: min
@@ -101,6 +104,8 @@ class DataTransformer:
         low_array: np.ndarray,
         volume_array: np.ndarray,
         relative_strength_sma_array: np.ndarray,
+        market_index_close_array: np.ndarray,
+        market_index_sma_array: np.ndarray,
         dates: List[datetime] = None,
     ):
         strategy_one_config = config["strategy_one"]
@@ -113,32 +118,41 @@ class DataTransformer:
         consolidation_time_window = strategy_one_config["consolidation_time_window"]
         breakthrough_fuzzy = strategy_one_config["breakthrough_fuzzy"]
         rs_threshold = strategy_one_config["rs_threshold"]
+        signal_threshold = strategy_one_config["signal_threshold"]
 
-        local_min_array, local_max_array = DataTransformer.get_middle_ex(low_array, high_array)
-        mark_array = np.full_like(close_array, 0, dtype=int)
+        local_min_array, local_max_array = DataTransformer.get_local_ex(low_array, high_array)
         signal_array = np.full_like(close_array, 0, dtype=int)
+        signal_objects = []
 
-        debug_code = 405
-        debug_dates = -1
+        total_signal = 0
+        market_index_filtered = 0
+        up_min_ratio_filtered = 0
+        down_max_ratio_filtered = 0
+        breakthrough_points_filtered = 0
+        consolidation_time_window_filtered = 0
+        rs_threshold_filtered = 0
+        filtered_reason = local_max_array.astype(int).copy()
+
         for code_idx in range(local_max_array.shape[1]):
-            if code_idx == debug_code:
-                print("debug")
             local_min, local_max, close, high, low, volume, relative_strength_sma = local_min_array[:, code_idx], local_max_array[:, code_idx], close_array[:, code_idx], high_array[:, code_idx], low_array[:, code_idx], volume_array[:, code_idx], relative_strength_sma_array[:, code_idx]
+            market_index_close = market_index_close_array[:, 0]
+            market_index_sma = market_index_sma_array[:, 0]
+            
             all_local_min_idx_list, all_local_max_idx_list = np.argwhere(local_min == True).reshape(-1), np.argwhere(local_max == True).reshape(-1)
             
             # > up_time_window (上升一段時間)
             local_min_idx_list = all_local_min_idx_list[all_local_min_idx_list > up_time_window]
             local_max_idx_list = all_local_max_idx_list[all_local_max_idx_list > up_time_window]
             for i, local_max_idx in enumerate(local_max_idx_list):
-                if local_max_idx == debug_dates:
-                    print("debug")
-
+                total_signal += 1
+                
                 local_max_value = high[local_max_idx]
                 prev_low = low[local_max_idx - up_time_window : local_max_idx + 1].min()
-                
 
                 # 上升超過一定幅度
                 if (local_max_value - prev_low) / prev_low < up_min_ratio:
+                    up_min_ratio_filtered += 1
+                    filtered_reason[local_max_idx, code_idx] = 6
                     continue
                 
                 # # 平均交易量大於 200
@@ -156,6 +170,8 @@ class DataTransformer:
 
                 # 下降超過最大幅度則跳過
                 if (local_max_value - next_low_value) / local_max_value > down_max_ratio:
+                    down_max_ratio_filtered += 1
+                    filtered_reason[local_max_idx, code_idx] = 2
                     continue
 
                 # 盤整 & 突破
@@ -163,19 +179,64 @@ class DataTransformer:
                 breakthrough_points = np.argwhere(close >= local_max_value*(1.03))
                 breakthrough_points = breakthrough_points[breakthrough_points >= breakthrough_idx]
                 if len(breakthrough_points) == 0:
-                    break
+                    breakthrough_points_filtered += 1
+                    filtered_reason[local_max_idx, code_idx] = 3
+                    continue
                 
                 breakthrough_point_idx = breakthrough_points[0]
                 if breakthrough_point_idx - local_max_idx < consolidation_time_window:
+                    consolidation_time_window_filtered += 1
+                    filtered_reason[local_max_idx, code_idx] = 4
                     continue
                 
                 if relative_strength_sma[breakthrough_point_idx] < rs_threshold:
+                    rs_threshold_filtered += 1
+                    filtered_reason[local_max_idx, code_idx] = 5
                     continue
 
-                mark_array[local_max_idx, code_idx] = breakthrough_point_idx
+                if market_index_close[breakthrough_point_idx] < market_index_sma[breakthrough_point_idx]:
+                    market_index_filtered += 1
+                    continue
+
+
                 signal_array[breakthrough_point_idx, code_idx] += 1
-        
-        return signal_array, mark_array
+                
+                signal_objects.append({
+                    "code_idx": code_idx,
+                    "signal_idx": breakthrough_point_idx,
+                    "start_max_idx": local_max_idx,
+                    "middle_min_idx": next_low_idx,
+                })
+        signal_threshold_mask = (signal_array <= signal_threshold) & (signal_array > 0)
+        signal_threshold_filtered = signal_threshold_mask.sum()
+        filtered_reason[signal_threshold_mask] = 7
+        signal_array[signal_threshold_mask] = 0
+
+        print(f"up_min_ratio_filtered: {int(100 * up_min_ratio_filtered/total_signal)}")
+        print(f"down_max_ratio_filtered: {int(100 * down_max_ratio_filtered/total_signal)}")
+        print(f"breakthrough_points_filtered: {int(100 * breakthrough_points_filtered/total_signal)}")
+        print(f"consolidation_time_window_filtered: {int(100 * consolidation_time_window_filtered/total_signal)}")
+        print(f"rs_threshold_filtered: {int(100 * rs_threshold_filtered/total_signal)}")
+        print(f"market_index_filtered: {int(100 * market_index_filtered/total_signal)}")
+        print(f"signal_threshold_filtered: {int(100 * signal_threshold_filtered/total_signal)}")
+
+        analyze_material = {
+            "local_min": local_min_array,
+            "local_max": local_max_array,
+            "signal_objects": signal_objects,
+            "filtered_reason": filtered_reason,
+            "filtered_reason_mapper": {
+                1: "Signal",
+                2: "Down max ratio",
+                3: "No breakthrough points",
+                4: "Consolidation time window",
+                5: "RS threshold",
+                6: "Up min ratio",
+                7: "Signal threshold",
+            }
+        }
+        return signal_array, analyze_material
+
 
 
     def get_relative_strength(close: np.ndarray, market_index_close: np.ndarray, time_period: int = 1):
@@ -200,3 +261,4 @@ class DataTransformer:
         RedisClient.set_np_array(cache_key, value)
 
         return value
+    

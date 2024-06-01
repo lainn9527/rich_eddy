@@ -86,6 +86,7 @@ class DataStore:
         instrument: Instrument,
         data_category: DataCategory,
         data_columns: List[DataColumn],
+        fill_missing_date: bool,
     ):
         # the data shape will be align with target
         if type(data_columns) is not list:
@@ -95,11 +96,11 @@ class DataStore:
         for data_column in data_columns:
             data_id = self.build_data_id(market, instrument, data_category, data_column)
             if data_id in self.track_data:
-                np_array = self.track_data[data_id]
+                np_arrays.append(self.track_data[data_id]["data"])
                 continue
 
             data_provider = self.get_data_provider(data_id)
-            np_array = data_provider.get_aligned_np_array(target_dates, target_codes, data_column)
+            np_array = data_provider.get_aligned_np_array(target_dates, target_codes, data_column, fill_missing_date)
             np_arrays.append(np_array)
 
             self.track_data[data_id] = {

@@ -8,7 +8,7 @@ from multiprocessing import Pool
 import numpy as np
 
 from src.utils.common import DataCategory, DataColumn, Instrument, Market
-from src.utils.utils import split_payload
+from src.utils.utils import split_payload, replace_null_with_empty
 from src.utils.redis_client import RedisClient
 
 def task(payload):
@@ -109,10 +109,10 @@ class BaseProvider:
                 # the format of file_name is 'yyyy-mm-dd.csv'
                 file_date = datetime.strptime(file_name.split(".")[0], "%Y-%m-%d")
                 with open(file_path) as fp:
-                    self.date_data[file_date.isoformat()] = list(csv.reader(fp))[1:]  # skip column row
+                    self.date_data[file_date.isoformat()] = list(csv.reader(replace_null_with_empty(fp)))[1:]  # skip column row
         
         print(f"load data from {start_year} to {end_year} done, loaded {len(self.date_data)} date data")
-        RedisClient.set_json(cache_key, self.date_data)
+        # RedisClient.set_json(cache_key, self.date_data)
 
 
     def load_date_data_parallel_task(self, payload):
@@ -194,12 +194,12 @@ class BaseProvider:
                 self.meta_data[code] = f"{name} {code} {market_type} {industry}"
 
 
-    def build_column_np_array(self, start_date = None, end_date = None):
-        # if codes != None:
-            # self.load_data_by_codes(codes)
+    def build_column_np_array(self, column_names: List[DataColumn], start_date = None, end_date = None):
+        for column in column_names:
+            if column not in self.column_names:
+                raise ValueError(f"column {column} not in column names")
 
         # read from cache first
-        column_names =  [column_name for column_name in self.column_names if column_name not in [DataColumn.Date, DataColumn.Code]]
         build_column_names = []
         for idx, column in enumerate(column_names):
             cache_key = f"np_array_{self.get_data_provider_id()}_{column}"
@@ -224,7 +224,7 @@ class BaseProvider:
             date_data = self.get_date_data(trading_date)
             for row in date_data:
                 # replace empty value with np.nan
-                row = [np.nan if x == "" else x for x in row]
+                row = [np.nan if x == "" or x == '-' else x for x in row]
                 code = row[0]
                 for build_column_name in build_column_names:
                     idx = self.column_names.index(build_column_name)
@@ -269,9 +269,9 @@ class BaseProvider:
         return code_data
 
 
-    def get_np_array(self, column, start_date = None, end_date = None):
-        if self.np_array_column == {}:
-            self.build_column_np_array(start_date, end_date)
+    def get_np_array(self, column: DataColumn, start_date = None, end_date = None):
+        if column not in self.np_array_column:
+            self.build_column_np_array([column], start_date, end_date)
 
         np_array = self.np_array_column[column]
         dates = self.get_all_dates()
@@ -294,9 +294,9 @@ class BaseProvider:
         return np_array, dates, codes
 
 
-    def get_aligned_np_array(self, target_dates, target_codes, column):
+    def get_aligned_np_array(self, target_dates, target_codes, column, fill_missing_date):
         if column not in self.aligned_np_array_column:
-            self.align_np_array(target_dates, target_codes, column)
+            self.align_np_array(target_dates, target_codes, column, fill_missing_date)
         
         return self.aligned_np_array_column[column]
 
@@ -355,7 +355,14 @@ class BaseProvider:
         return self.date_data != {}
     
     
-    def align_np_array(self, target_dates, target_codes, column):
+    def align_np_array(self, target_dates, target_codes, column, fill_missing_date):
+        # use cache if exist
+        cache_key = f"aligned_np_array_{self.get_data_provider_id()}_{column}_x_{len(target_dates)}_y_{len(target_codes)}"
+        if RedisClient.has(cache_key):
+            self.aligned_np_array_column[column] = RedisClient.get_np_array(cache_key)
+            print(f"get aligned np array cache from key: {cache_key}")
+            return
+
         np_array, current_dates, current_codes = self.get_np_array(column, start_date=target_dates[0], end_date=target_dates[-1])
 
         # align code
@@ -372,18 +379,16 @@ class BaseProvider:
         date_idx_map = {date: idx for idx, date in enumerate(current_dates)}
         target_np_array = np.full((len(target_dates), len(target_codes)), np.nan)
 
-        # iterate through the target_dates and set new_row as the value of that date
-        # if the date is in current_dates, use the value in current_dates to update the new_row
-        new_row = np.full(len(target_codes), np.nan)
-        for i, target_date in enumerate(target_dates):
-            if target_date in date_idx_map:
-                np_array_row = np_array[date_idx_map[target_date]]
-                # use np_array_row to update row
-                new_row = np.array([np_array_row[i] if ~np.isnan(np_array_row[i]) else new_row[i] for i in range(len(new_row))])
-
-            target_np_array[i] = new_row
+        if fill_missing_date:
+            raise NotImplementedError("fill missing date is not implemented yet")
+        
+        else:
+            for i, target_date in enumerate(target_dates):
+                if target_date in date_idx_map:
+                    target_np_array[i] = np_array[date_idx_map[target_date]]
 
         self.aligned_np_array_column[column] = target_np_array
+        RedisClient.set_np_array(cache_key, target_np_array)
 
 
     def get_meta_data(self, codes: List[str]):

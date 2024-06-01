@@ -28,6 +28,13 @@ config = {
             "data_provider_class": DailyPriceProvider,
             "data_dir": Path("data/market_index"),
         },
+        {
+            "market": Market.TW,
+            "instrument": Instrument.Stock,
+            "data_category": DataCategory.Chip,
+            "data_provider_class": DailyPriceProvider,
+            "data_dir": Path("data/chip"),
+        },
     ],
     "parameter": {
         "sma_breakthrough_alignment_filter": {
@@ -50,8 +57,15 @@ config = {
             "stop_loss_ratio": 0.037,
 
             "rs_threshold": 90,
-            "rs_sma_period": 3
+            "rs_sma_period": 3,
+
+            "market_index_sma_period": 30,
         },
+        "chip_strategy": {
+            "foreign_total_holdings_ratio_sma_period": 5,
+            "local_self_holdings_ratio_sma_period": 5,
+            "local_investor_holdings_ratio_sma_period": 5,
+        }
     }
 }
 
@@ -61,17 +75,24 @@ tuned_config = {
         "half_month_month_diff_ratio": 0.03
     },
     "strategy_one": {
-        "up_min_ratio": 0.44,
-        "up_time_window": 90,
-        "down_max_ratio": 0.32,
-        "down_max_time_window": 33,
-        "consolidation_time_window": 11,
+        "up_min_ratio": 0.32,
+        "up_time_window": 70,
+        "down_max_ratio": 0.21,
+        "down_max_time_window": 22,
+        "consolidation_time_window": 13,
         "breakthrough_fuzzy": 0.2,
         "volume_avg_time_window": 120,
         "volume_avg_threshold": 200,
-        "holding_days": 5,
-        "stop_loss_ratio": 0.037,
-        "rs_threshold": 90,
-        "rs_sma_period": 3
+        "holding_days": 4,
+        "stop_loss_ratio": 0.05,
+        "rs_threshold": 94,
+        "rs_sma_period": 3,
+        "market_index_sma_period": 3,
+        "signal_threshold": 2,
+    },
+    "chip_strategy": {
+        "foreign_total_holdings_ratio_sma_period": 60,
+        "local_self_holdings_ratio_sma_period": 5,
+        "local_investor_holdings_ratio_sma_period": 5,
     }
 }

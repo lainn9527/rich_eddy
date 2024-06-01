@@ -29,21 +29,3 @@ class FinanceProvider(BaseProvider):
             column_names=DataCategoryColumn.get_columns(data_category),
             lazy_loading=lazy_loading,
         )
-
-    # def to_dataframe(self, data):
-    #     df = pd.DataFrame(data, columns=DailyPriceProvider.column_names,).astype(
-    #         {
-    #             "code": "str",
-    #             "date": "datetime64[ns]",
-    #             "open": "float64",
-    #             "high": "float64",
-    #             "low": "float64",
-    #             "close": "float64",
-    #             "volume": "float64",
-    #             "trading_value": "float64",
-    #             "total_stocks": "int",
-    #         }
-    #     )
-    #     df["date"] = pd.to_datetime(df["date"])
-
-    #     return df

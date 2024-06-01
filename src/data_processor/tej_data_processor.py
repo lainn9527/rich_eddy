@@ -48,7 +48,12 @@ class TejDataProcessor(BaseDataProcessor):
 
                     if year_to_daily_info.get(year).get(date_str) == None:
                         year_to_daily_info[year][date_str] = []
-                    year_to_daily_info[year][date_str].append([code, name, trading_date.strftime("%Y%m%d")] + remaining_line)
+
+                    if name != None:
+                        year_to_daily_info[year][date_str].append([code, name, trading_date.strftime("%Y%m%d")] + remaining_line)
+                    else:
+                        year_to_daily_info[year][date_str].append([code, trading_date.strftime("%Y%m%d")] + remaining_line)
+
         print("finish reading all lines")
         gc.collect()
 
@@ -71,7 +76,6 @@ class TejDataProcessor(BaseDataProcessor):
 
         # write picked column
         picked_data_dir = Path(dest_data_dir / "date")
-        picked_columns = list(map(lambda x: x.value, DataCategoryColumn.get_columns(data_category)))
         column_mapper = cls.tej_column_name_mapper[data_category.value]
         for year, daily_info_dict in year_to_daily_info.items():
             year_dir_path = picked_data_dir / str(year)
@@ -79,7 +83,7 @@ class TejDataProcessor(BaseDataProcessor):
                 year_dir_path.mkdir(parents=True, exist_ok=True)
 
             for trading_date, daily_info in daily_info_dict.items():
-                daily_info = cls.pick_columns(daily_info, picked_columns, column_mapper)
+                daily_info = cls.pick_columns(daily_info, DataCategoryColumn.get_columns(data_category), column_mapper)
 
                 with open(f"{year_dir_path}/{trading_date}.csv", "w") as fp:
                     csv.writer(fp).writerows(daily_info)
@@ -89,16 +93,12 @@ class TejDataProcessor(BaseDataProcessor):
     def extract_code_and_date_from_line(line: List[str]):
         raise NotImplementedError
 
-
-    def transform_useful_columns_and_stock(date_data_dir: Path, data_category: str):
-        # new data path
-        new_data_dir_name = "date"
-        new_data_dir = date_data_dir.parent / new_data_dir_name
-
+    @classmethod
+    def transform_useful_columns_and_stock(cls, date_data_dir: Path, dest_data_dir: Path, data_category: str):
         year_dirs = os.listdir(date_data_dir)
         for year_dir in year_dirs:
             year_dir_path = date_data_dir / year_dir
-            new_year_dir_path = new_data_dir / year_dir
+            new_year_dir_path = dest_data_dir / year_dir
             if not new_year_dir_path.exists():
                 new_year_dir_path.mkdir(parents=True, exist_ok=True)
 
@@ -114,7 +114,9 @@ class TejDataProcessor(BaseDataProcessor):
                             valid_stock_info.append(line)
 
                     processed_lines = TejDataProcessor.pick_columns(
-                        data_category, valid_stock_info
+                        valid_stock_info,
+                        DataCategoryColumn.get_columns(data_category),
+                        cls.tej_column_name_mapper[data_category.value]
                     )
 
                 new_file_path = f"{new_year_dir_path}/{file_name}"

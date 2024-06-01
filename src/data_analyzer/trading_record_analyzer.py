@@ -46,6 +46,11 @@ class TradingRecordAnalyzer:
         # plot distributions of return rate
         plot_result_distribution = ff.create_distplot([order_record_df["return_rate"]], ["return rate"], bin_size=0.2, show_rug=False)
 
+        # group by order code and rank by profit loss
+        total_profit_loss = order_record_df["profit_loss"].sum()
+        order_record_df_by_code = order_record_df.groupby("code")
+        order_record_df_by_code["profit_loss"].sum().sort_values(ascending=False)
+
         plots.extend([plot_cover_reason, plot_trading_freq, plot_result_distribution])
         return [f"{avg_profit_loss:.2f}"]
 

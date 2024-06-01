@@ -67,9 +67,37 @@ class DataColumn(Enum):
     Recurring_EPS = "recurring_eps"
 
     # chip
-    Foreign_Volume = "foreign_volume"
-    Local_Investor_Volume = "local_investor_volume"
-    Local_Self_Volume = "local_self_volume"
+    Foreign_Buy_Volume="foreign_buy_volume"
+    Foreign_Sell_Volume="foreign_sell_volume"
+    Foreign_Net_Volume="foreign_net_volume"
+    Foreign_Buy_Amount="foreign_buy_amount"
+    Foreign_Sell_Amount="foreign_sell_amount"
+    Local_Investor_Buy_Volume="local_investor_buy_volume"
+    Local_Investor_Sell_Volume="local_investor_sell_volume"
+    Local_Investor_Net_Volume="local_investor_net_volume"
+    Local_Investor_Buy_Amount="local_investor_buy_amount"
+    Local_Investor_Sell_Amount="local_investor_sell_amount"
+    Local_Self_Buy_Volume="local_self_buy_volume"
+    Local_Self_Sell_Volume="local_self_sell_volume"
+    Local_Self_Net_Volume="local_self_net_volume"
+    Local_Self_Buy_Amount="local_self_buy_amount"
+    Local_Self_Sell_Amount="local_self_sell_amount"
+    Total_Investor_Buy_Volume="total_investor_buy_volume"
+    Total_Investor_Sell_Volume="total_investor_sell_volume"
+    Total_Investor_Net_Volume="total_investor_net_volume"
+    Foreign_Trading_Ratio="foreign_trading_ratio"
+    Local_Investor_Trading_Ratio="local_investor_trading_ratio"
+    Local_Self_Trading_Ratio="local_self_trading_ratio"
+    Total_Investor_Trading_Ratio="total_investor_trading_ratio"
+    Foreign_Total_Holdings_Ratio="foreign_total_holdings_ratio"
+    Local_Investor_Holdings_Ratio="local_investor_holdings_ratio"
+    Local_Self_Holdings_Ratio="local_self_holdings_ratio"
+    Foreign_Total_Holdings="foreign_total_holdings"
+    Local_Investor_Holdings="local_investor_holdings"
+    Local_Self_Holdings="local_self_holdings"
+    Director_Supervisor_Holdings_Ratio="director_supervisor_holdings_ratio"
+    Director_Supervisor_Pledge_Ratio="director_supervisor_pledge_ratio"
+    Director_Supervisor_Holdings="director_supervisor_holdings"
 
 class DataCategoryColumn:
     daily_price = [
@@ -95,9 +123,37 @@ class DataCategoryColumn:
     chip = [
         DataColumn.Code,
         DataColumn.Date,
-        DataColumn.Foreign_Volume,
-        DataColumn.Local_Investor_Volume,
-        DataColumn.Local_Self_Volume,
+        DataColumn.Foreign_Buy_Volume,
+        DataColumn.Foreign_Sell_Volume,
+        DataColumn.Foreign_Net_Volume,
+        DataColumn.Foreign_Buy_Amount,
+        DataColumn.Foreign_Sell_Amount,
+        DataColumn.Local_Investor_Buy_Volume,
+        DataColumn.Local_Investor_Sell_Volume,
+        DataColumn.Local_Investor_Net_Volume,
+        DataColumn.Local_Investor_Buy_Amount,
+        DataColumn.Local_Investor_Sell_Amount,
+        DataColumn.Local_Self_Buy_Volume,
+        DataColumn.Local_Self_Sell_Volume,
+        DataColumn.Local_Self_Net_Volume,
+        DataColumn.Local_Self_Buy_Amount,
+        DataColumn.Local_Self_Sell_Amount,
+        DataColumn.Total_Investor_Buy_Volume,
+        DataColumn.Total_Investor_Sell_Volume,
+        DataColumn.Total_Investor_Net_Volume,
+        DataColumn.Foreign_Trading_Ratio,
+        DataColumn.Local_Investor_Trading_Ratio,
+        DataColumn.Local_Self_Trading_Ratio,
+        DataColumn.Total_Investor_Trading_Ratio,
+        DataColumn.Foreign_Total_Holdings_Ratio,
+        DataColumn.Local_Investor_Holdings_Ratio,
+        DataColumn.Local_Self_Holdings_Ratio,
+        DataColumn.Foreign_Total_Holdings,
+        DataColumn.Local_Investor_Holdings,
+        DataColumn.Local_Self_Holdings,
+        DataColumn.Director_Supervisor_Holdings_Ratio,
+        DataColumn.Director_Supervisor_Pledge_Ratio,
+        DataColumn.Director_Supervisor_Holdings,
     ]
 
     market_index = [

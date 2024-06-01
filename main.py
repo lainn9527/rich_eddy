@@ -8,6 +8,7 @@ import sys
 import talib
 from src.data_store.data_store import DataStore
 from src.strategy.trend_strategy import TrendStrategy
+from src.strategy.chip_strategy import ChipStrategy
 from src.platform.platform import Platform
 from src.broker.broker import Broker
 from src.config.default import config, tuned_config
@@ -45,53 +46,60 @@ def tune():
     end_date = datetime(2024, 3, 1)
 
     platform = Platform({ "broker": Broker()})
-    cash = 100000000
+    cash = 10000000000
     explanatory_variables = {
-        "up_min_ratio": [0.10, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45],
-        "up_time_window": [45, 60, 75, 90],
-        "down_max_ratio": [0.2, 0.25, 0.3, 0.35],
-        "down_max_time_window": [20, 25, 30, 35],
-        "consolidation_time_window": [5, 7, 10, 13, 15],
+        # "up_min_ratio": [0.3, 0.35, 0.4, 0.45],
+        # "up_time_window": [60, 75, 90],
+        # "down_max_ratio": [0.2, 0.25, 0.3, 0.35],
+        # "down_max_time_window": [20, 25, 30, 35],
+        # "consolidation_time_window": [5, 7, 10, 13, 15],
+        # "stop_loss_ratio": [0.03, 0.04, 0.05, 0.06],
+        # "holding_days": [3, 5, 7, 10],
+        # "rs_threshold": [90, 95],
+        # "rs_sma_period": [1, 2, 3],
+        "local_investor_holdings_ratio_sma_period": [3, 5, 7, 10, 15, 20],
     }
     combinations = []
-    # for key, values in explanatory_variables.items():
-    #     if combinations == []:
-    #         combinations = [[f"{key}_{value}", {key: value}] for value in values]
-    #         continue
-    #     new_combinations = []
-    #     for combination in combinations:
-    #         for value in values:
-    #             new_combinations.append([f"{combination[0]}_{key}_{value}", {**combination[1], key: value}])
-    #     combinations = new_combinations
+    for key, values in explanatory_variables.items():
+        if combinations == []:
+            combinations = [[f"{key}_{value}", {key: value}] for value in values]
+            continue
+        new_combinations = []
+        for combination in combinations:
+            for value in values:
+                new_combinations.append([f"{combination[0]}_{key}_{value}", {**combination[1], key: value}])
+        combinations = new_combinations
 
-    combinations = random_combinations(explanatory_variables, 100)
+    # combinations = random_combinations(explanatory_variables, 20)
     turn_result_path = Path("result") / f"{sys.argv[1]}" if len(sys.argv) > 1 else Path("result") / f"tune_result_{len(combinations)}"
     turn_result_path.mkdir(parents=True, exist_ok=True)
     data_store = DataStore()
     for combination in combinations:
         result_name = combination[0]
-        new_config = {**config["parameter"], "strategy_one": {**config["parameter"]["strategy_one"], **combination[1] }}
+        new_config = {**tuned_config, "chip_strategy": {**tuned_config["chip_strategy"], **combination[1] }}
+        # new_config = {**config["parameter"], "strategy_one": {**tuned_config["strategy_one"], **combination[1] }}
         result_path = turn_result_path/ result_name
 
         print(f"Start to run {result_name}")
         strategy = TrendStrategy(platform, data_store, cash=cash, config=new_config)
         platform.run(strategy, start_date, end_date, result_path)
 
-@time_profiler
+
 def main():
     start_date = datetime(2022, 11, 18)
     start_date = datetime(2011, 11, 18)
-    end_date = datetime(2024, 3, 1)
-
+    end_date = datetime(2023, 12, 31)
+    write_analyze_material = True
     platform = Platform({ "broker": Broker()})
-    cash = 100000000
+    cash = 10000000000
     data_store = DataStore()
     result_path = Path("result") / f"{sys.argv[1]}" if len(sys.argv) > 1 else None
     strategy = TrendStrategy(platform, data_store, cash=cash, config=tuned_config)
-    platform.run(strategy, start_date, end_date, result_path)
+    # strategy = ChipStrategy(platform, data_store, cash=cash, config=config["parameter"])
+    platform.run(strategy, start_date, end_date, result_path, write_analyze_material)
 
 
 if __name__ == "__main__":
     print(datetime.now())
-    main()
+    tune()
     print(datetime.now())

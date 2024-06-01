@@ -362,8 +362,6 @@ class Strategy:
                 f"{account['book_account_profit_loss_rate']:.2f}",
             ])
 
-        if result_dir == None:
-            result_dir = Path("result") / datetime.now().strftime("%Y%m%d_%H%M%S")
         
         result = [result_dir.parts[-1], int(used_cash), int(final_profit_loss), f"{final_return:.2f}%", f"{annualized_return:.2f}%", len(self.order_record_dict)]
         result_dir.mkdir(parents=True, exist_ok=True)

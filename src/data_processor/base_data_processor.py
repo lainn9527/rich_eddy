@@ -3,6 +3,7 @@ import os
 
 from pathlib import Path
 from typing import List
+from ..utils.common import DataColumn
 
 class BaseDataProcessor:
     @classmethod
@@ -57,12 +58,13 @@ class BaseDataProcessor:
                 csv.writer(fp).writerows(sorted_daily_info)
 
     @classmethod
-    def pick_columns(cls, lines: List[str], picked_columns: List[str], column_mapper: dict):
+    def pick_columns(cls, lines: List[str], picked_columns: List[DataColumn], column_mapper: dict):
         """
         Input: lines (with column), picked_columns, column_mapper
         Output: processed_lines (with column)
         """
 
+        picked_columns = list(map(lambda x: x.value, picked_columns))
         origin_column_names = lines[0]
         picked_source_columns = list(map(lambda x: column_mapper[x], picked_columns))
         picked_source_columns_idx = list(map(lambda x: origin_column_names.index(x), picked_source_columns))
