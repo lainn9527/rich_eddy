@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List
 from collections import OrderedDict
 from pathlib import Path
+from functools import wraps
 import csv
 import numpy as np
 import json
@@ -12,6 +13,25 @@ from src.platform.platform import Platform
 from src.utils.common import DataCategory, Instrument, Market, OrderSide, DataColumn, TechnicalIndicator, TradingResultColumn
 from src.utils.order import OrderRecord, Order
 from src.data_analyzer.trading_record_analyzer import TradingRecordAnalyzer
+
+def filter_decorator(filter_func):
+    @wraps(filter_func)
+    def wrapper(*args, **kwargs):
+        self = args[0]
+        if filter_func.__name__ not in self.activated_filters:
+            # not filtered
+            return False
+        
+        is_filtered = filter_func(*args, **kwargs)
+        if is_filtered:
+            self.filtered_signal_count[filter_func.__name__] += 1
+            if "x" in kwargs and "y" in kwargs:
+                self.filtered_reason[kwargs["x"], kwargs["y"]] = 3
+        
+        return is_filtered
+
+    return wrapper
+
 class Strategy:
     data_provider_dict: Dict[str, BaseProvider]
     data_store: DataStore
@@ -33,6 +53,11 @@ class Strategy:
     trading_codes: List[str]
     current_trading_date: datetime
     
+    activated_filters: List[str] = []
+    filtered_signal_count: Dict[str, int] = {}
+    filtered_reason: np.ndarray
+    filtered_reason_mapper = {}
+
     def __init__(
         self,
         platform: Platform,
@@ -59,6 +84,9 @@ class Strategy:
 
         self.trading_dates = None
         self.trading_codes = None
+
+        self.activated_filters = config.get("activated_filters", [])
+        self.decorate_filter()
 
 
     def prepare_data(self, start_date: datetime, end_date: datetime):
@@ -380,3 +408,11 @@ class Strategy:
         with open(result_dir.parent / "result.csv", "a+") as fp:
             writer = csv.writer(fp)
             writer.writerow(result)
+
+    def decorate_filter(self):
+        filter_prefix = "filter_"
+        for i, filter_func in enumerate(self.__class__.__dict__.values()):
+            if callable(filter_func) and filter_func.__name__.startswith(filter_prefix):
+                setattr(self.__class__, filter_func.__name__, filter_decorator(filter_func))
+                self.filtered_signal_count[filter_func.__name__] = 0
+                self.filtered_reason_mapper[i] = filter_func.__name__[len(filter_prefix):]
