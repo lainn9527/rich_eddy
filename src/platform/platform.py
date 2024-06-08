@@ -32,7 +32,7 @@ class Platform:
         start_date: datetime = None,
         end_date: datetime = None,
         result_path: Path = Path("result") / datetime.now().strftime("%Y%m%d_%H%M%S"),
-        write_analyze_material: bool = False,
+        full_record: bool = False,
     ) -> None:
         analyze_material = strategy.prepare_data(start_date, end_date)
         strategy.ensure_data()
@@ -43,9 +43,9 @@ class Platform:
             strategy.step(trading_date)
             strategy.step_end(trading_date)
 
-        strategy.end(result_path)
+        strategy.end(result_path, full_record)
 
-        if write_analyze_material and analyze_material is not None:
+        if full_record and analyze_material is not None:
             with open(result_path / "analyze_material.json", "w") as fp:
                 json.dump(analyze_material, fp, cls=NumpyEncoder)
 

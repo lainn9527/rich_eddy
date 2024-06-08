@@ -1,8 +1,9 @@
 from pathlib import Path
 from datetime import datetime
-import numpy as np
-from functools import wraps
 from pyinstrument import Profiler
+from functools import wraps
+import argparse
+import numpy as np
 
 import sys
 import talib
@@ -11,7 +12,41 @@ from src.strategy.trend_strategy import TrendStrategy
 from src.strategy.chip_strategy import ChipStrategy
 from src.platform.platform import Platform
 from src.broker.broker import Broker
-from src.config.default import config, tuned_config
+from src.config.default import config
+from src.utils.utils import combine_config
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--mode",
+        "-m",
+        type=str,
+        default="tune",
+        help="Could be run, tune, or random_tune",
+    )
+    parser.add_argument(
+        "--path",
+        "-p",
+        type=str,
+        default=None,
+        help="Result path",
+    )
+    parser.add_argument(
+        "--record",
+        "-r",
+        type=bool,
+        default=False,
+        help="Record all the result or not",
+    )
+    parser.add_argument(
+        "--random_count",
+        "-n",
+        type=int,
+        default=100,
+        help="Random tune count",
+    )
+    return parser.parse_args()
+
 
 def time_profiler(func):
     # only for local development
@@ -32,15 +67,55 @@ def random_combinations(config, n = 5):
     for _ in range(n):
         config_comb = {}
         for key, values in config.items():
-            low, high = values[0], values[-1]
-            if type(low) == int:
-                config_comb[key] = random.randint(low, high)
-            elif type(low) == float:
-                config_comb[key] = round(random.uniform(low, high), 2)
-        combinations.append(["-".join([f"{key}_{value}" for key, value in config_comb.items()]), config_comb])
+            if type(values[0]) == int:
+                config_comb[key] = random.randint(values[0], values[-1])
+            elif type(values[0]) == float:
+                config_comb[key] = round(random.uniform(values[0], values[-1]), 2)
+            elif type(values[0]) == bool:
+                config_comb[key] = random.choice(values)
+        combinations.append(config_comb)
+    
     return combinations
 
-def tune():
+
+def exhaust_combinations(config):
+    combinations = [{}]
+    for key, value in config.items():
+        new_combinations = []
+        for combination in combinations:
+            new_combinations.extend([{**combination, key: value} for value in value])
+        combinations = new_combinations
+    
+    return combinations
+
+
+def build_combinations(source_config, explanatory_variables, mode = 'tune', n=5):
+    # config and explanatory_variables is at { strategy_x: { key: value } } format
+    all_config = {}
+    # flatten the explanatory_variables
+    for key, sub_config in explanatory_variables.items():
+        for sub_key, values in sub_config.items():
+            all_config[f"{key}|{sub_key}"] = values
+
+    if mode == 'tune':
+        combinations = exhaust_combinations(all_config)
+    elif mode == 'random_tune':
+        combinations = random_combinations(all_config, args.random_count)
+
+    # group the config back to the original format
+    grouped_configs = []
+    for combination in combinations:
+        grouped_config = {}
+        for key, value in combination.items():
+            key, sub_key = key.split("|")
+            if key not in grouped_config:
+                grouped_config[key] = {}
+            grouped_config[key][sub_key] = value
+        grouped_configs.append(combine_config(source_config, grouped_config))
+
+    return grouped_configs
+
+def tune(args: argparse.Namespace):
     start_date = datetime(2022, 11, 18)
     start_date = datetime(2011, 11, 18)
     end_date = datetime(2024, 3, 1)
@@ -48,44 +123,40 @@ def tune():
     platform = Platform({ "broker": Broker()})
     cash = 10000000000
     explanatory_variables = {
-        # "up_min_ratio": [0.3, 0.35, 0.4, 0.45],
-        # "up_time_window": [60, 75, 90],
-        # "down_max_ratio": [0.2, 0.25, 0.3, 0.35],
-        # "down_max_time_window": [20, 25, 30, 35],
-        # "consolidation_time_window": [5, 7, 10, 13, 15],
-        # "stop_loss_ratio": [0.03, 0.04, 0.05, 0.06],
-        # "holding_days": [3, 5, 7, 10],
-        # "rs_threshold": [90, 95],
-        # "rs_sma_period": [1, 2, 3],
-        "local_investor_holdings_ratio_sma_period": [3, 5, 7, 10, 15, 20],
+        "activated_filters": {
+            "filter_up_min_ratio": [True, False],
+            "filter_down_max_ratio": [True, False],
+            "filter_consolidation_time_window": [True, False],
+            "filter_relative_strength": [True, False],
+            "filter_market_index": [True, False],
+            "filter_chip": [True, False],
+            "filter_volume": [True, False],
+            "filter_signal_threshold": [True, False],
+        },
+        "strategy_one": {
+            # "up_min_ratio": [0.3, 0.35, 0.4, 0.45],
+            # "up_time_window": [60, 75, 90],
+            # "down_max_ratio": [0.2, 0.25, 0.3, 0.35],
+            # "down_max_time_window": [20, 25, 30, 35],
+            # "consolidation_time_window": [5, 7, 10, 13, 15],
+            # "stop_loss_ratio": [0.03, 0.04, 0.05, 0.06],
+            # "holding_days": [3, 5, 7, 10],
+            # "rs_threshold": [70, 95],
+            # "rs_sma_period": [1, 2, 3],
+        },
     }
-    combinations = []
-    for key, values in explanatory_variables.items():
-        if combinations == []:
-            combinations = [[f"{key}_{value}", {key: value}] for value in values]
-            continue
-        new_combinations = []
-        for combination in combinations:
-            for value in values:
-                new_combinations.append([f"{combination[0]}_{key}_{value}", {**combination[1], key: value}])
-        combinations = new_combinations
-
-    # combinations = random_combinations(explanatory_variables, 20)
-    turn_result_path = Path("result") / f"{sys.argv[1]}" if len(sys.argv) > 1 else Path("result") / f"tune_result_{len(combinations)}"
+    config_combinations = build_combinations(config["parameter"], explanatory_variables, mode=args.mode, n=20)
+    turn_result_path = Path("result") / args.path if args.path != None else Path("result") / f"tune_result_{len(config_combinations)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     turn_result_path.mkdir(parents=True, exist_ok=True)
     data_store = DataStore()
-    for combination in combinations:
-        result_name = combination[0]
-        new_config = {**tuned_config, "chip_strategy": {**tuned_config["chip_strategy"], **combination[1] }}
-        # new_config = {**config["parameter"], "strategy_one": {**tuned_config["strategy_one"], **combination[1] }}
-        result_path = turn_result_path/ result_name
-
-        print(f"Start to run {result_name}")
-        strategy = TrendStrategy(platform, data_store, cash=cash, config=new_config)
+    for i, combination in enumerate(config_combinations):
+        result_path = turn_result_path/ f"tune_{i}"
+        print(f"Start to run {i} combination")
+        strategy = TrendStrategy(platform, data_store, cash=cash, config=combination)
         platform.run(strategy, start_date, end_date, result_path)
 
 
-def main():
+def main(args: argparse.Namespace):
     start_date = datetime(2022, 11, 18)
     start_date = datetime(2011, 11, 18)
     end_date = datetime(2023, 12, 31)
@@ -93,13 +164,17 @@ def main():
     platform = Platform({ "broker": Broker()})
     cash = 10000000000
     data_store = DataStore()
-    result_path = Path("result") / f"{sys.argv[1]}" if len(sys.argv) > 1 else None
-    strategy = TrendStrategy(platform, data_store, cash=cash, config=tuned_config)
+    result_path = Path("result") / args.path if args.path != None else None
+    strategy = TrendStrategy(platform, data_store, cash=cash, config=config["parameter"])
     # strategy = ChipStrategy(platform, data_store, cash=cash, config=config["parameter"])
-    platform.run(strategy, start_date, end_date, result_path, write_analyze_material)
+    platform.run(strategy, start_date, end_date, result_path, full_record=args.record)
 
 
 if __name__ == "__main__":
+    args = parse_args()
     print(datetime.now())
-    tune()
+    if args.mode == "run":
+        main(args)
+    elif args.mode == "tune" or args.mode == "random_tune":
+        tune(args)
     print(datetime.now())

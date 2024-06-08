@@ -32,3 +32,14 @@ def replace_null_with_empty(string):
     if type(string) == str:
         string = [string]
     return list(map(lambda x: x.replace("\x00", "").replace("-", ""), string))
+
+
+def combine_config(source, target):
+    source = source.copy()
+    target = target.copy()
+    for key, value in target.items():
+        if type(value) == dict:
+            source[key] = combine_config(source[key], value)
+        else:
+            source[key] = value
+    return source

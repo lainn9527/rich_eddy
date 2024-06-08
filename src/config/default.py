@@ -37,80 +37,39 @@ config = {
         },
     ],
     "parameter": {
-        "sma_breakthrough_alignment_filter": {
-            "week_half_month_diff_ratio": 0.03,
-            "half_month_month_diff_ratio": 0.03,
+        "activated_filters": {
+            "filter_up_min_ratio": True,
+            "filter_down_max_ratio": True,
+            "filter_breakthrough_point": True,
+            "filter_consolidation_time_window": True,
+            "filter_relative_strength": True,
+            "filter_market_index": True,
+            "filter_chip": True,
+            "filter_volume": True,
+            "filter_signal_threshold": True,
         },
-        # "recurring_eps_filter": {"amplitudes": [0.05]},
         "strategy_one": {
-            "up_min_ratio": 0.45,
-            "up_time_window": 60,
-            "down_max_ratio": 0.25,
-            "down_max_time_window": 30,
-            "consolidation_time_window": 10,
-            "breakthrough_fuzzy": 0.2,
-
+            "up_min_ratio": 0.32,
+            "up_time_window": 70,
+            "down_max_ratio": 0.21,
+            "down_max_time_window": 22,
+            "consolidation_time_window": 13,
+            "breakthrough_fuzzy": 0.03,
             "volume_avg_time_window": 120,
             "volume_avg_threshold": 200,
-
-            "holding_days": 5,
-            "stop_loss_ratio": 0.037,
-
-            "rs_threshold": 90,
+            "holding_days": 4,
+            "stop_loss_ratio": 0.05,
+            "rs_threshold": 94,
             "rs_sma_period": 3,
-
-            "market_index_sma_period": 30,
+            "market_index_sma_period": 3,
+            "signal_threshold": 2,
+            "volume_short_sma_period": 5,
+            "volume_long_sma_period": 20,
         },
         "chip_strategy": {
-            "foreign_total_holdings_ratio_sma_period": 5,
-            "local_self_holdings_ratio_sma_period": 5,
-            "local_investor_holdings_ratio_sma_period": 5,
-        }
-    }
-}
-
-tuned_config = {
-    "activated_filters": [
-        "filter_up_min_ratio",
-        "filter_down_max_ratio",
-        "filter_breakthrough_point",
-        "filter_consolidation_time_window",
-        "filter_relative_strength",
-        "filter_market_index",
-        "filter_chip",
-        "filter_volume",
-        "filter_signal_threshold"
-    ],
-    "sma_breakthrough_alignment_filter": {
-        "week_half_month_diff_ratio": 0.03,
-        "half_month_month_diff_ratio": 0.03
+            "foreign_total_holdings_ratio_sma_period": 10,
+            "local_self_holdings_ratio_sma_period": 10,
+            "local_investor_holdings_ratio_sma_period": 10,
+        },
     },
-    "strategy_one": {
-        "up_min_ratio": 0.32,
-        "up_time_window": 70,
-        "down_max_ratio": 0.21,
-        "down_max_time_window": 22,
-        "consolidation_time_window": 13,
-        "breakthrough_fuzzy": 0.03,
-
-        "volume_avg_time_window": 120,
-        "volume_avg_threshold": 200,
-
-        "holding_days": 4,
-        "stop_loss_ratio": 0.05,
-
-        "rs_threshold": 94,
-        "rs_sma_period": 3,
-
-        "market_index_sma_period": 3,
-        "signal_threshold": 2,
-
-        "volume_short_sma_period": 5,
-        "volume_long_sma_period": 20,
-    },
-    "chip_strategy": {
-        "foreign_total_holdings_ratio_sma_period": 10,
-        "local_self_holdings_ratio_sma_period": 10,
-        "local_investor_holdings_ratio_sma_period": 10,
-    }
 }

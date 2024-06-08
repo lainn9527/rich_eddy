@@ -1,12 +1,13 @@
 from pathlib import Path
 from plotly.subplots import make_subplots
+from typing import List
 
 import plotly.graph_objects as go
 import plotly.express as px
 import plotly.figure_factory as ff
 import csv
 import pandas as pd
-
+import numpy as np
 
 plots = []
 class TradingRecordAnalyzer:
@@ -15,11 +16,29 @@ class TradingRecordAnalyzer:
         account_record_df =  pd.read_csv(result_dir / "account_record.csv", header=0, parse_dates=[0])
         return order_record_df, account_record_df
 
+    def to_trading_record_df(order_rows: List[any], account_rows: List[any]) -> list[pd.DataFrame, pd.DataFrame]:
+        # order_column = ["code", "date", "volume", "amount", "profit_loss", "side", "buy_date", "cover_date", "buy_price", "cover_price", "return_rate", "holding_days", "avg_return_rate", "cover_reason"]
+        order_dtype_mapper = ['object', 'datetime64[ns]', 'float64', 'float64', 'float64', 'object', 'datetime64[ns]', 'datetime64[ns]', 'float64', 'float64', 'float64', 'int64', 'float64', 'object']
+        order_record_df = pd.DataFrame(order_rows[1:], columns=order_rows[0])
+        order_record_df = order_record_df.astype(dict(zip(order_record_df.columns, order_dtype_mapper)))
 
-    def analyze(result_dir: Path):
-        order_record_df, account_record_df = TradingRecordAnalyzer.load_trading_record_df(result_dir)
+        # acount_column = ["date", "cash", "holding_value", "realized_profit_loss", "book_account_profit_loss", "book_account_profit_loss_rate"]
+        account_dtype_mapper = ['datetime64[ns]', 'float64', 'float64', 'float64', 'float64', 'float64']
+        account_record_df = pd.DataFrame(account_rows[1:], columns=account_rows[0])
+        account_record_df = account_record_df.astype(dict(zip(account_record_df.columns, account_dtype_mapper)))
+
+        return order_record_df, account_record_df
+
+    def analyze(result_dir: Path, order_rows: List[any] = None, account_rows: List[any] = None):
+        if order_rows and account_rows:
+            # read from input rows first
+            order_record_df, account_record_df = TradingRecordAnalyzer.to_trading_record_df(order_rows=order_rows, account_rows=account_rows)
+        elif result_dir:
+            order_record_df, account_record_df = TradingRecordAnalyzer.load_trading_record_df(result_dir)
+        else:
+            raise ValueError("No result dir or rows provided")
+
         init_cash = account_record_df["cash"][0]
-
         account_result = TradingRecordAnalyzer.analyze_account_record(account_record_df)
         order_result = TradingRecordAnalyzer.analyze_order_record(order_record_df)
 

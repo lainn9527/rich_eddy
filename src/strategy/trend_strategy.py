@@ -143,9 +143,9 @@ class TrendStrategy(Strategy):
             all_local_max_idx_list = np.argwhere(local_max == True).reshape(-1)
 
             # > up_time_window (上升一段時間)
+
             local_min_idx_list = all_local_min_idx_list[all_local_min_idx_list > up_time_window]
             local_max_idx_list = all_local_max_idx_list[all_local_max_idx_list > up_time_window]
-
             for i, local_max_idx in enumerate(local_max_idx_list):
                 total_signal += 1
 
@@ -331,11 +331,6 @@ class TrendStrategy(Strategy):
                 total_signal += 1
 
                 # 上升超過一定幅度
-                # local_max_value = high[local_max_idx]
-                # prev_low = low[local_max_idx - up_time_window: local_max_idx + 1].min()
-                # if self.filter_up_min_ratio(x=local_max_idx, y=code_idx, high_array=self.high_, low_array=self.low_, up_time_window=up_time_window,up_min_ratio=up_min_ratio):
-                # continue
-
                 local_max_value = high[local_max_idx]
                 prev_low = low[local_max_idx - up_time_window: local_max_idx + 1].min()
                 if (local_max_value - prev_low) / prev_low < up_min_ratio:
@@ -436,6 +431,9 @@ class TrendStrategy(Strategy):
             }
         }
         return signal_array, analyze_material
+
+    def filtered_up_a_while(self, x, y, up_time_window):
+        return x > up_time_window
 
     def filter_up_min_ratio(self, x, y, local_max_value, prev_low, up_min_ratio):
         # 上升超過一定幅度

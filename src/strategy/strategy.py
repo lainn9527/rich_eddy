@@ -18,7 +18,7 @@ def filter_decorator(filter_func):
     @wraps(filter_func)
     def wrapper(*args, **kwargs):
         self = args[0]
-        if filter_func.__name__ not in self.activated_filters:
+        if filter_func.__name__ not in self.activated_filters.keys() or not self.activated_filters[filter_func.__name__]:
             # not filtered
             return False
         
@@ -53,7 +53,7 @@ class Strategy:
     trading_codes: List[str]
     current_trading_date: datetime
     
-    activated_filters: List[str] = []
+    activated_filters: Dict[str, bool] = {}
     filtered_signal_count: Dict[str, int] = {}
     filtered_reason: np.ndarray
     filtered_reason_mapper = {}
@@ -85,7 +85,7 @@ class Strategy:
         self.trading_dates = None
         self.trading_codes = None
 
-        self.activated_filters = config.get("activated_filters", [])
+        self.activated_filters = config.get("activated_filters", {})
         self.decorate_filter()
 
 
@@ -327,7 +327,7 @@ class Strategy:
             )
 
 
-    def end(self, result_dir: Path):
+    def end(self, result_dir: Path, full_record):
         used_cash = self.initial_cash - min([account["cash"] for account in self.account_history])
         if used_cash == 0:
             print("Zero trading record")
@@ -390,24 +390,31 @@ class Strategy:
                 f"{account['book_account_profit_loss_rate']:.2f}",
             ])
 
-        
-        result = [result_dir.parts[-1], int(used_cash), int(final_profit_loss), f"{final_return:.2f}%", f"{annualized_return:.2f}%", len(self.order_record_dict)]
+        summary_result = [result_dir.parts[-1], int(used_cash), int(final_profit_loss), f"{final_return:.2f}%", f"{annualized_return:.2f}%", len(self.order_record_dict)]
         result_dir.mkdir(parents=True, exist_ok=True)
         with open(result_dir / "config.json", "w") as fp:
             json.dump(self.config, fp)
 
-        with open(result_dir / "order_record.csv", "w") as fp:
+        if full_record:
+            with open(result_dir / "order_record.csv", "w") as fp:
+                writer = csv.writer(fp)
+                writer.writerows(order_record_rows)
+            
+            with open(result_dir / "account_record.csv", "w") as fp:
+                writer = csv.writer(fp)
+                writer.writerows(account_record_rows)
+
+        summary_result.extend(TradingRecordAnalyzer.analyze(result_dir=result_dir, order_rows=order_record_rows, account_rows=account_record_rows))
+        summary_result_path = result_dir.parent / "result.csv"
+        if not summary_result_path.exists():
+            with open(summary_result_path, "w") as fp:
+                writer = csv.writer(fp)
+                writer.writerow(TradingResultColumn.summary_result)
+
+        with open(summary_result_path, "a+") as fp:
             writer = csv.writer(fp)
-            writer.writerows(order_record_rows)
-        
-        with open(result_dir / "account_record.csv", "w") as fp:
-            writer = csv.writer(fp)
-            writer.writerows(account_record_rows)
-        
-        result.extend(TradingRecordAnalyzer.analyze(result_dir))
-        with open(result_dir.parent / "result.csv", "a+") as fp:
-            writer = csv.writer(fp)
-            writer.writerow(result)
+            writer.writerow(summary_result)
+
 
     def decorate_filter(self):
         filter_prefix = "filter_"
