@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import datetime
 from pyinstrument import Profiler
 from functools import wraps
+from multiprocessing import Pool
 import argparse
 import numpy as np
 
@@ -100,7 +101,7 @@ def build_combinations(source_config, explanatory_variables, mode = 'tune', n=5)
     if mode == 'tune':
         combinations = exhaust_combinations(all_config)
     elif mode == 'random_tune':
-        combinations = random_combinations(all_config, args.random_count)
+        combinations = random_combinations(all_config, n)
 
     # group the config back to the original format
     grouped_configs = []
@@ -116,12 +117,6 @@ def build_combinations(source_config, explanatory_variables, mode = 'tune', n=5)
     return grouped_configs
 
 def tune(args: argparse.Namespace):
-    start_date = datetime(2022, 11, 18)
-    start_date = datetime(2011, 11, 18)
-    end_date = datetime(2024, 3, 1)
-
-    platform = Platform({ "broker": Broker()})
-    cash = 10000000000
     explanatory_variables = {
         "activated_filters": {
             "filter_up_min_ratio": [True, False],
@@ -134,47 +129,60 @@ def tune(args: argparse.Namespace):
             "filter_signal_threshold": [True, False],
         },
         "strategy_one": {
-            # "up_min_ratio": [0.3, 0.35, 0.4, 0.45],
-            # "up_time_window": [60, 75, 90],
-            # "down_max_ratio": [0.2, 0.25, 0.3, 0.35],
-            # "down_max_time_window": [20, 25, 30, 35],
-            # "consolidation_time_window": [5, 7, 10, 13, 15],
-            # "stop_loss_ratio": [0.03, 0.04, 0.05, 0.06],
-            # "holding_days": [3, 5, 7, 10],
-            # "rs_threshold": [70, 95],
-            # "rs_sma_period": [1, 2, 3],
+            "up_min_ratio": [0.3, 0.35, 0.4, 0.45],
+            "up_time_window": [60, 75, 90],
+            "down_max_ratio": [0.2, 0.25, 0.3, 0.35],
+            "down_max_time_window": [20, 25, 30, 35],
+            "consolidation_time_window": [5, 7, 10, 13, 15],
+            "stop_loss_ratio": [0.03, 0.04, 0.05, 0.06],
+            "holding_days": [3, 5, 7, 10],
+            "rs_threshold": [70, 95],
+            "rs_sma_period": [1, 2, 3],
         },
     }
-    config_combinations = build_combinations(config["parameter"], explanatory_variables, mode=args.mode, n=20)
+    config_combinations = build_combinations(config["parameter"], explanatory_variables, mode=args.mode, n=args.random_count)
     turn_result_path = Path("result") / args.path if args.path != None else Path("result") / f"tune_result_{len(config_combinations)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     turn_result_path.mkdir(parents=True, exist_ok=True)
-    data_store = DataStore()
+
+    multi_processing_payload = []
     for i, combination in enumerate(config_combinations):
         result_path = turn_result_path/ f"tune_{i}"
-        print(f"Start to run {i} combination")
-        strategy = TrendStrategy(platform, data_store, cash=cash, config=combination)
-        platform.run(strategy, start_date, end_date, result_path)
+        multi_processing_payload.append([argparse.Namespace(mode="run", path=result_path, record=args.record), combination])
+    with Pool(6) as p:
+        p.starmap(main, multi_processing_payload)
+    
+    # start_date = datetime(2022, 11, 18)
+    # start_date = datetime(2011, 11, 18)
+    # end_date = datetime(2024, 3, 1)
+
+    # platform = Platform({ "broker": Broker()})
+    # cash = 10000000000
+    # data_store = DataStore()
+    # for i, combination in enumerate(config_combinations):
+    #     result_path = turn_result_path/ f"tune_{i}"
+    #     print(f"Start to run {i} combination")
+    #     strategy = TrendStrategy(platform, data_store, cash=cash, config=combination)
+    #     platform.run(strategy, start_date, end_date, result_path)
 
 
-def main(args: argparse.Namespace):
+def main(arguments: argparse.Namespace, config):
     start_date = datetime(2022, 11, 18)
     start_date = datetime(2011, 11, 18)
     end_date = datetime(2023, 12, 31)
-    write_analyze_material = True
     platform = Platform({ "broker": Broker()})
     cash = 10000000000
     data_store = DataStore()
-    result_path = Path("result") / args.path if args.path != None else None
-    strategy = TrendStrategy(platform, data_store, cash=cash, config=config["parameter"])
-    # strategy = ChipStrategy(platform, data_store, cash=cash, config=config["parameter"])
-    platform.run(strategy, start_date, end_date, result_path, full_record=args.record)
+    result_path = Path(arguments.path) if arguments.path != None else None
+    strategy = TrendStrategy(platform, data_store, cash=cash, config=config)
+    # strategy = ChipStrategy(platform, data_store, cash=cash, config=config)
+    platform.run(strategy, start_date, end_date, result_path, full_record=arguments.record)
 
 
 if __name__ == "__main__":
     args = parse_args()
     print(datetime.now())
     if args.mode == "run":
-        main(args)
+        main(args, config["parameter"])
     elif args.mode == "tune" or args.mode == "random_tune":
         tune(args)
     print(datetime.now())
