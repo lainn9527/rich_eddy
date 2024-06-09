@@ -26,7 +26,7 @@ def filter_decorator(filter_func):
         if is_filtered:
             self.filtered_signal_count[filter_func.__name__] += 1
             if "x" in kwargs and "y" in kwargs:
-                self.filtered_reason[kwargs["x"], kwargs["y"]] = 3
+                self.filtered_reason[kwargs["x"], kwargs["y"]] = self.filtered_reason_mapper[filter_func.__name__]
         
         return is_filtered
 
@@ -422,4 +422,4 @@ class Strategy:
             if callable(filter_func) and filter_func.__name__.startswith(filter_prefix):
                 setattr(self.__class__, filter_func.__name__, filter_decorator(filter_func))
                 self.filtered_signal_count[filter_func.__name__] = 0
-                self.filtered_reason_mapper[i] = filter_func.__name__[len(filter_prefix):]
+                self.filtered_reason_mapper[filter_func.__name__] = i

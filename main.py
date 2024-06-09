@@ -13,7 +13,7 @@ from src.strategy.trend_strategy import TrendStrategy
 from src.strategy.chip_strategy import ChipStrategy
 from src.platform.platform import Platform
 from src.broker.broker import Broker
-from src.config.default import config
+from src.config.default import config, tune_config
 from src.utils.utils import combine_config
 
 def parse_args():
@@ -22,7 +22,7 @@ def parse_args():
         "--mode",
         "-m",
         type=str,
-        default="tune",
+        default="run",
         help="Could be run, tune, or random_tune",
     )
     parser.add_argument(
@@ -35,8 +35,7 @@ def parse_args():
     parser.add_argument(
         "--record",
         "-r",
-        type=bool,
-        default=False,
+        action="store_true",
         help="Record all the result or not",
     )
     parser.add_argument(
@@ -172,7 +171,10 @@ def main(arguments: argparse.Namespace, config):
     platform = Platform({ "broker": Broker()})
     cash = 10000000000
     data_store = DataStore()
-    result_path = Path(arguments.path) if arguments.path != None else None
+    if arguments.path != None and not arguments.path.startswith("result"):
+        result_path = Path("result") / arguments.path
+    else:
+        result_path = arguments.path
     strategy = TrendStrategy(platform, data_store, cash=cash, config=config)
     # strategy = ChipStrategy(platform, data_store, cash=cash, config=config)
     platform.run(strategy, start_date, end_date, result_path, full_record=arguments.record)
@@ -182,7 +184,7 @@ if __name__ == "__main__":
     args = parse_args()
     print(datetime.now())
     if args.mode == "run":
-        main(args, config["parameter"])
+        main(args, combine_config(config["parameter"], tune_config))
     elif args.mode == "tune" or args.mode == "random_tune":
         tune(args)
     print(datetime.now())

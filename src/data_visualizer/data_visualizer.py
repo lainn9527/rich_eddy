@@ -7,7 +7,9 @@ import numpy as np
 import pandas as pd
 import pandas_ta as ta
 import plotly.graph_objects as go
+import plotly.express as px
 import json
+import os
 
 from src.strategy.trend_strategy import TrendStrategy
 from src.data_store.data_store import DataStore
@@ -21,6 +23,7 @@ plotly_config = dict(
         "modeBarButtonsToRemove": ["select"],
     }
 )
+pd.options.plotting.backend = "plotly"
 
 class DataVisualizer:
     def __init__(self):
@@ -100,6 +103,15 @@ class DataVisualizer:
 
 
     def visualize_trend_strategy(drawing_codes: List[str], result_dir: Path):
+        def group_signal_by_codes(signal_objects):
+            code_signal_dict = {}
+            for signal_object in signal_objects:
+                code = codes[signal_object["code_idx"]]
+                if code not in code_signal_dict:
+                    code_signal_dict[code] = []
+                code_signal_dict[code].append(signal_object)
+            return code_signal_dict
+
         with open(result_dir / "analyze_material.json", "r") as fp:
             analyze_material = json.load(fp)
         
@@ -113,7 +125,8 @@ class DataVisualizer:
         filtered_reason = np.array(analyze_material["filtered_reason"])
         filtered_reason_mapper = analyze_material["filtered_reason_mapper"]
         signal_objects = analyze_material["signal_objects"]        
-        
+        failure_breakthrough_objects = analyze_material["failure_breakthrough_objects"]
+
         data_store = DataStore()
         [open_, high_, low_, close_, volume_], dates, codes = data_store.get_data(
             market=Market.TW,
@@ -123,18 +136,14 @@ class DataVisualizer:
             start_date=start_date,
             end_date=end_date
         )
-        
-        # group signal by codes
-        code_signal_dict = {}
-        for signal_object in signal_objects:
-            code = codes[signal_object["code_idx"]]
-            if code not in code_signal_dict:
-                code_signal_dict[code] = []
-            code_signal_dict[code].append(signal_object)
 
+        # group signal by codes
+        code_signal_dict = group_signal_by_codes(signal_objects)
+        code_failure_breakthrough_dict = group_signal_by_codes(failure_breakthrough_objects)
+
+        
         for code in drawing_codes:
             code_idx = codes.index(code)
-            code_signal = code_signal_dict[code]
             code_order_record_df = order_record_df[order_record_df["code"] == code]
 
             data = {
@@ -148,13 +157,50 @@ class DataVisualizer:
                 "local_max": local_max[:, code_idx],
                 "filtered_reason": filtered_reason[:, code_idx],
                 "filtered_reason_mapper": filtered_reason_mapper,
-                "signal": code_signal,
+                "signal": code_signal_dict[code] if code in code_signal_dict else [],
+                "failure_breakthrough": code_failure_breakthrough_dict[code] if code in code_failure_breakthrough_dict else [],
             }
-            fig = DataVisualizer.plot_trend_strategy(code, data, code_signal)
+            fig = DataVisualizer.plot_trend_strategy(code, data)
             fig = DataVisualizer.plot_local_min_max(code, data, fig)
             fig = DataVisualizer.plot_filtered_reason(code, data, fig)
             fig = DataVisualizer.plot_order_record(code, data, code_order_record_df, fig)
             fig.show(config=plotly_config)
+
+
+    def visualize_trend_strategy_tune_result(result_dir: Path):
+        summary_result = pd.read_csv(result_dir / "result.csv", header=0, index_col=0)
+        summary_result[["final_return", "annualized_return", "max_draw_down"]] = summary_result[["final_return", "annualized_return", "max_draw_down"]].map(lambda x: pd.to_numeric(x[:-1]))
+        tune_result_dirs = os.listdir(result_dir)
+
+        tune_result_dict = {}
+        for tune_result_dir in tune_result_dirs:
+            if (result_dir / tune_result_dir).is_dir() == False:
+                continue
+            with open(result_dir / tune_result_dir / "config.json", "r") as fp:
+                tune_result_dict[tune_result_dir] = json.load(fp)
+        
+        config_names = []
+        tune_result_series = {}
+        for name in summary_result.index:
+            tune_config = tune_result_dict[name]
+            for _, sub_config_value in tune_config.items():
+                for config_name, config_value in sub_config_value.items():
+                    if config_name not in tune_result_series:
+                        tune_result_series[config_name] = []
+                        config_names.append(config_name)
+                    tune_result_series[config_name].append(config_value)
+
+        tune_result_df = pd.DataFrame(tune_result_series, index=summary_result.index)
+        result_df = pd.concat([summary_result, tune_result_df], axis=1)
+        for config_name in config_names:
+            fig = result_df[[config_name, "final_return"]].plot.box(x=config_name, y="final_return", title=f"{config_name} vs final_return")
+            fig.show(config=plotly_config)
+            # agg_result = result_df.groupby(config_name).aggregate(lambda tdf: tdf.tolist())["final_return"]
+            # # px.box(x, title=f"{config_name} vs final_return").show(config=plotly_config)
+            # x = list(agg_result.index)
+            # for i in agg_result.index:
+            #     fig = go.scatter(x=i, y=agg_result[i], mode="markers")
+            #     fig.show(config=plotly_config)
 
 
 
@@ -264,8 +310,11 @@ class DataVisualizer:
 
         return fig
     
-    def plot_trend_strategy(code, draw_df: Dict[str, np.ndarray], signals):
+    def plot_trend_strategy(code, draw_df: Dict[str, any]):
         fig = DataVisualizer.basic_plot_stock(code, draw_df)
+        signals = draw_df["signal"]
+        failure_breakthrough = draw_df["failure_breakthrough"]
+
         for signal in signals:
             signal_idx = signal["signal_idx"]
             start_max_idx = signal["start_max_idx"]
@@ -283,6 +332,22 @@ class DataVisualizer:
                 col=1,
             )
 
+        for signal in failure_breakthrough:
+            signal_idx = signal["signal_idx"]
+            start_max_idx = signal["start_max_idx"]
+            middle_min_idx = signal["middle_min_idx"]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[draw_df["date"][start_max_idx],  draw_df["date"][signal_idx]],
+                    y=[draw_df["high"][start_max_idx], draw_df["close"][signal_idx]],
+                    mode="lines",
+                    line=dict(color="red", width=3),
+                ),
+                secondary_y=False,
+                row=1,
+                col=1,
+            )
         return fig
 
 

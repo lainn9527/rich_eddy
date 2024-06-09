@@ -190,3 +190,15 @@ class TradingResultColumn:
     summary_result = ['name', 'used_cash', 'final_profit_loss', 'final_return', 'annualized_return', '#_trading_records']
     trading_record = ["code", "date", "volume", "amount", "profit_loss", "side", "buy_date", "cover_date", "buy_price", "cover_price", "return_rate", "holding_days", "avg_return_rate", "cover_reason"]
     account_record = ["date", "cash", "holding_value", "realized_profit_loss", "book_account_profit_loss", "book_account_profit_loss_rate"]
+
+FILTER_PARAMETER_MAPPER = {
+    "filter_up_min_ratio": ["up_min_ratio"],
+    "filter_down_max_ratio": True,
+    "filter_breakthrough_point": True,
+    "filter_consolidation_time_window": True,
+    "filter_relative_strength": True,
+    "filter_market_index": True,
+    "filter_chip": True,
+    "filter_volume": True,
+    "filter_signal_threshold": True,
+}

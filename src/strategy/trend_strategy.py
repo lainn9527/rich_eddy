@@ -109,18 +109,22 @@ class TrendStrategy(Strategy):
             close=self.close_,
         )
         local_min_array, local_max_array = DataTransformer.get_local_ex(low=true_low, high=true_high)
-        volume_short_sma_array = self.data_store.get_technical_indicator(
-            TechnicalIndicator.SMA, self.volume_, volume_short_sma_period)
-        volume_long_sma_array = self.data_store.get_technical_indicator(
-            TechnicalIndicator.SMA, self.volume_, volume_long_sma_period)
+        volume_short_sma_array = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.volume_, volume_short_sma_period)
+        volume_long_sma_array = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.volume_, volume_long_sma_period)
 
+        failed_breakthrough = np.full_like(self.close_, 0, dtype=int)
         signal_array = np.full_like(self.close_, 0, dtype=int)
         signal_objects = []
-
+        failure_breakthrough_objects = []
         total_signal = 0
         self.filtered_reason = local_max_array.astype(int).copy()
 
+        debug_code = ''
+        debug_time = ''
         for code_idx in range(local_max_array.shape[1]):
+            if code_idx == debug_code:
+                code_idx
+
             local_min = local_min_array[:, code_idx]
             local_max = local_max_array[:, code_idx]
             close = self.close_[:, code_idx]
@@ -146,9 +150,12 @@ class TrendStrategy(Strategy):
 
             local_min_idx_list = all_local_min_idx_list[all_local_min_idx_list > up_time_window]
             local_max_idx_list = all_local_max_idx_list[all_local_max_idx_list > up_time_window]
-            for i, local_max_idx in enumerate(local_max_idx_list):
-                total_signal += 1
 
+            for i, local_max_idx in enumerate(local_max_idx_list):
+                if debug_time == local_max_idx:
+                    local_max_idx
+
+                total_signal += 1
                 local_max_value = high[local_max_idx]
                 prev_low = low[local_max_idx - up_time_window: local_max_idx + 1].min()
 
@@ -164,7 +171,7 @@ class TrendStrategy(Strategy):
 
                 # 下降 (找到下一個最低點)
                 next_low_array = local_min_idx_list[np.argwhere(local_min_idx_list > local_max_idx).reshape(-1)]
-                if len(next_low_array) == 0:
+                if len(next_low_array) == 0 or next_low_array[0] > local_max_idx + down_max_time_window:
                     next_low_idx = local_max_idx + low[local_max_idx:local_max_idx+down_max_time_window+1].argmin()
                     next_low_value = low[next_low_idx]
                 else:
@@ -185,15 +192,22 @@ class TrendStrategy(Strategy):
                 breakthrough_idx = next_low_idx
                 breakthrough_points = np.argwhere(close >= local_max_value*(1 + breakthrough_fuzzy))
                 breakthrough_points = breakthrough_points[breakthrough_points >= breakthrough_idx]
-                
+
                 if self.filter_breakthrough_point(
                     x=local_max_idx,
                     y=code_idx,
                     number_of_points=len(breakthrough_points)
                 ):
                     continue
-
+                
                 breakthrough_point_idx = breakthrough_points[0]
+                signal_object = {
+                    "code_idx": code_idx,
+                    "signal_idx": breakthrough_point_idx,
+                    "start_max_idx": local_max_idx,
+                    "middle_min_idx": next_low_idx,
+                }
+                failure_breakthrough_objects.append(signal_object)
                 if self.filter_consolidation_time_window(
                     x=local_max_idx,
                     y=code_idx,
@@ -228,7 +242,6 @@ class TrendStrategy(Strategy):
                 ):
                     continue
 
-                
                 if self.filter_volume(
                     x=local_max_idx,
                     y=code_idx,
@@ -240,18 +253,18 @@ class TrendStrategy(Strategy):
 
 
                 signal_array[breakthrough_point_idx, code_idx] += 1
-                signal_objects.append({
-                    "code_idx": code_idx,
-                    "signal_idx": breakthrough_point_idx,
-                    "start_max_idx": local_max_idx,
-                    "middle_min_idx": next_low_idx,
-                })
+                signal_objects.append(signal_object)
+                failure_breakthrough_objects.pop()
+
 
         self.filter_signal_threshold(signal_array, signal_threshold)
+        # reverse filtered_reason_mapper
+        self.filtered_reason_mapper = {filter_name: filter_idx for filter_idx, filter_name in self.filtered_reason_mapper.items()}
         analyze_material = {
             "local_min": local_min_array,
             "local_max": local_max_array,
             "signal_objects": signal_objects,
+            "failure_breakthrough_objects": failure_breakthrough_objects,
             "filtered_reason": self.filtered_reason,
             "filtered_reason_mapper": self.filtered_reason_mapper,
             "filtered_signal_count": self.filtered_signal_count
@@ -458,14 +471,13 @@ class TrendStrategy(Strategy):
         return not np.isnan(local_investor_holdings_ratio_sma) and local_investor_holdings_ratio < local_investor_holdings_ratio_sma
 
     def filter_volume(self, x, y, volume, volume_short_sma, volume_long_sma):
-        return volume < volume_long_sma
+        return volume_short_sma < volume_long_sma
 
     def filter_signal_threshold(self, signal_array, signal_threshold):
         signal_threshold_mask = (signal_array <= signal_threshold) & (signal_array > 0)
         self.filtered_signal_count["filter_singal_threshold"] = int(signal_threshold_mask.sum())
         self.filtered_reason[signal_threshold_mask] = 7
         signal_array[signal_threshold_mask] = 0
-    
 
     def step(self, trading_date: datetime):
         super().step(trading_date)
