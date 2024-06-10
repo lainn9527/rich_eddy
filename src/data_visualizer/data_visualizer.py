@@ -136,6 +136,11 @@ class DataVisualizer:
             start_date=start_date,
             end_date=end_date
         )
+        close_5_sma = data_store.get_technical_indicator(TechnicalIndicator.SMA, close_, 5)
+        close_10_sma = data_store.get_technical_indicator(TechnicalIndicator.SMA, close_, 10)
+        close_20_sma = data_store.get_technical_indicator(TechnicalIndicator.SMA, close_, 20)
+        close_60_sma = data_store.get_technical_indicator(TechnicalIndicator.SMA, close_, 60)
+        close_120_sma = data_store.get_technical_indicator(TechnicalIndicator.SMA, close_, 120)
 
         # group signal by codes
         code_signal_dict = group_signal_by_codes(signal_objects)
@@ -145,7 +150,8 @@ class DataVisualizer:
         for code in drawing_codes:
             code_idx = codes.index(code)
             code_order_record_df = order_record_df[order_record_df["code"] == code]
-
+            if len(code_order_record_df) == 0:
+                continue
             data = {
                 "date": dates,
                 "open": open_[:, code_idx],
@@ -159,11 +165,19 @@ class DataVisualizer:
                 "filtered_reason_mapper": filtered_reason_mapper,
                 "signal": code_signal_dict[code] if code in code_signal_dict else [],
                 "failure_breakthrough": code_failure_breakthrough_dict[code] if code in code_failure_breakthrough_dict else [],
+                "sma_5": close_5_sma[:, code_idx],
+                "sma_10": close_10_sma[:, code_idx],
+                "sma_20": close_20_sma[:, code_idx],
+                "sma_60": close_60_sma[:, code_idx],
+                "sma_120": close_120_sma[:, code_idx],
             }
-            fig = DataVisualizer.plot_trend_strategy(code, data)
+
+            fig = DataVisualizer.basic_plot_stock(code, data)
+            fig = DataVisualizer.plot_trend_strategy(code, data, fig)
             fig = DataVisualizer.plot_local_min_max(code, data, fig)
             fig = DataVisualizer.plot_filtered_reason(code, data, fig)
             fig = DataVisualizer.plot_order_record(code, data, code_order_record_df, fig)
+            fig = DataVisualizer.plot_sma(code, data, fig)
             fig.show(config=plotly_config)
 
 
@@ -310,8 +324,7 @@ class DataVisualizer:
 
         return fig
     
-    def plot_trend_strategy(code, draw_df: Dict[str, any]):
-        fig = DataVisualizer.basic_plot_stock(code, draw_df)
+    def plot_trend_strategy(code, draw_df: Dict[str, any], fig):
         signals = draw_df["signal"]
         failure_breakthrough = draw_df["failure_breakthrough"]
 
@@ -342,6 +355,7 @@ class DataVisualizer:
                     x=[draw_df["date"][start_max_idx],  draw_df["date"][signal_idx]],
                     y=[draw_df["high"][start_max_idx], draw_df["close"][signal_idx]],
                     mode="lines",
+                    name="failure_breakthrough",
                     line=dict(color="red", width=3),
                 ),
                 secondary_y=False,
@@ -352,9 +366,6 @@ class DataVisualizer:
 
 
     def plot_local_min_max(code, draw_df: Dict[str, np.ndarray], fig = None):
-        if fig == None:
-            fig = DataVisualizer.basic_plot_stock(code, draw_df)
-
         fig.add_trace(
             go.Scatter(
                 x=np.array(draw_df['date'])[draw_df['local_min']],
@@ -384,9 +395,6 @@ class DataVisualizer:
         return fig
 
     def plot_filtered_reason(code, draw_df: Dict[str, np.ndarray], fig = None):
-        if fig == None:
-            fig = DataVisualizer.basic_plot_stock(code, draw_df)
-
         filtered_reason_mapper = draw_df["filtered_reason_mapper"]
         filtered_reason_df = pd.DataFrame(draw_df["filtered_reason"], dtype=str).replace(filtered_reason_mapper)
         
@@ -435,4 +443,21 @@ class DataVisualizer:
             row=1,
             col=1,
         )
+        return fig
+    
+    def plot_sma(code, draw_df: Dict[str, np.ndarray], fig = None):
+        if fig == None:
+            fig = DataVisualizer.basic_plot_stock(code, draw_df)
+        for i in [5, 10, 20, 60, 120]:
+            fig.add_trace(
+                go.Scatter(
+                    x=draw_df["date"],
+                    y=draw_df[f"sma_{i}"],
+                    name=f"sma_{i}",
+                    line=dict(width=2),
+                ),
+                secondary_y=False,
+                row=1,
+                col=1,
+            )
         return fig

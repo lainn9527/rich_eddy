@@ -152,37 +152,13 @@ class Strategy:
                     order_record.order.volume,
                     'out_of_market'
                 )
+        self.update_book_profit_loss(trading_date)
 
+    def step_end(self, trading_date: datetime):
+        # update for new orders
+        self.update_book_profit_loss(trading_date)
 
-    def step_end(self, trading_date: datetime):        
-        # update book profit loss
-        for order_record in self.holdings.values():
-            if order_record.is_covered:
-                continue
-
-            source_order = order_record.order
-            # get current price
-            close_price = self.close_[-1][self.trading_codes.index(order_record.order.code)]
-            cover_order = self.platform.place_order(
-                source_order.market,
-                source_order.instrument,
-                source_order.code,
-                trading_date,
-                close_price,
-                order_record.open_position,
-                OrderSide.Sell if source_order.side == OrderSide.Buy else OrderSide.Buy,
-                True,
-            )
-            net_profit_loss = cover_order.execute_value - cover_order.transaction_cost
-            book_value = net_profit_loss
-            book_profit_loss = order_record.net_profit_loss + net_profit_loss
-            book_profit_loss_rate = (book_profit_loss / order_record.cost) * 100
-            
-            order_record.book_price = close_price
-            order_record.book_value = book_value
-            order_record.book_profit_loss = book_profit_loss
-            order_record.book_profit_loss_rate = book_profit_loss_rate
-
+        # calculate book profit loss
         book_holding_value = sum([order_record.book_value for order_record in self.holdings.values()])
         book_account_profit_loss = (self.cash + book_holding_value) - self.initial_cash
         book_account_profit_loss_rate = (book_account_profit_loss / self.initial_cash) * 100
@@ -299,9 +275,37 @@ class Strategy:
             print(f"{self.current_trading_date.date()} place order: {order.side.value} {order.volume} {order.code} with ${order.execute_price}")
 
 
-    def append_daily_order_record(
-        self, trading_date: datetime, order_record: OrderRecord
-    ):
+    def update_book_profit_loss(self, trading_date: datetime):
+        # update book profit loss
+        for order_record in self.holdings.values():
+            if order_record.is_covered:
+                continue
+
+            source_order = order_record.order
+            # get current price
+            close_price = self.close_[-1][self.trading_codes.index(order_record.order.code)]
+            cover_order = self.platform.place_order(
+                source_order.market,
+                source_order.instrument,
+                source_order.code,
+                trading_date,
+                close_price,
+                order_record.open_position,
+                OrderSide.Sell if source_order.side == OrderSide.Buy else OrderSide.Buy,
+                True,
+            )
+            net_profit_loss = cover_order.execute_value - cover_order.transaction_cost
+            book_value = net_profit_loss
+            book_profit_loss = order_record.net_profit_loss + net_profit_loss
+            book_profit_loss_rate = (book_profit_loss / order_record.cost) * 100
+            
+            order_record.book_price = close_price
+            order_record.book_value = book_value
+            order_record.book_profit_loss = book_profit_loss
+            order_record.book_profit_loss_rate = book_profit_loss_rate
+
+
+    def append_daily_order_record(self, trading_date: datetime, order_record: OrderRecord):
         if self.history_order_by_day.get(trading_date) is None:
             self.history_order_by_day[trading_date] = []
 

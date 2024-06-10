@@ -77,8 +77,28 @@ class TradingRecordAnalyzer:
 
     def analyze_account_record(account_record_df: pd.DataFrame):
         # plot the realized profit loss
-        plot_realized_profit_loss = px.line(x=account_record_df["date"], y=account_record_df["realized_profit_loss"], title="Realized Profit Loss")
+        plot_realized_profit_loss = px.line(
+            x=account_record_df["date"],
+            y=account_record_df["book_account_profit_loss"],
+            title="Realized Profit Loss"
+        )
+
+        # count max draw down
+        lowest_idx = np.argmax(np.maximum.accumulate(account_record_df["book_account_profit_loss"]) - account_record_df["book_account_profit_loss"])
+        highest_idx = np.argmax(account_record_df["book_account_profit_loss"][:lowest_idx]) if lowest_idx > 0 else 0
+        max_draw_down_rate = (account_record_df["book_account_profit_loss"][lowest_idx] - account_record_df["book_account_profit_loss"][highest_idx]) / account_record_df["book_account_profit_loss"][highest_idx] * 100
         
+        # append max_draw_down on figure
+        plot_realized_profit_loss.add_trace(
+            go.Scatter(
+                x=[account_record_df["date"][highest_idx], account_record_df["date"][lowest_idx]],
+                y=[account_record_df["book_account_profit_loss"][highest_idx], account_record_df["book_account_profit_loss"][lowest_idx]],
+                mode="lines",
+                line=dict(color="red"),
+            )
+        )
+        print(f"Max Draw Down: {max_draw_down_rate:.2f}%")
+
         # count return for every year
         account_record_df["realized_profit_loss_by_day"] = account_record_df["realized_profit_loss"].diff()
         account_record_df.loc[0, "realized_profit_loss_by_day"] = 0 # set first day profit loss to 0 to avoid nan
@@ -87,13 +107,8 @@ class TradingRecordAnalyzer:
         return_by_year = account_record_df_by_year["realized_profit_loss_by_day"].sum() / init_account_value_of_year * 100
         plot_return_rate = px.line(x=return_by_year.index, y=return_by_year, title="Return Rate by Year")
 
-        # count max draw down
-        max_draw_down = account_record_df["book_account_profit_loss_rate"].min()
-
-        print(f"Max Draw Down: {max_draw_down:.2f}%")
-
         plots.extend([plot_realized_profit_loss, plot_return_rate])
-        return [f"{max_draw_down:.2f}%"]
+        return [f"{max_draw_down_rate:.2f}%"]
 
 
     def compare_trading_record(origin_result_dir: Path, target_result_dir: Path):
