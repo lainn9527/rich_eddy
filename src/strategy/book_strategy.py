@@ -56,7 +56,7 @@ class BookStrategy(Strategy):
             end_date=end_date,
         )
 
-        self.foreign_total_holdings_ratio_, self.local_self_holdings_ratio_, self.local_investor_holdings_ratio_ = self.data_store.get_aligned_data(
+        self.foreign_total_holdings_ratio_, self.local_self_holdings_ratio_, self.local_investor_holdings_ratio_, self.foreign_buy_volume_, self.local_buy_volume_, self.local_self_buy_volume_, self.total_buy_volume_  = self.data_store.get_aligned_data(
             target_dates=dates,
             target_codes=codes,
             market=Market.TW,
@@ -66,6 +66,10 @@ class BookStrategy(Strategy):
                 DataColumn.Foreign_Total_Holdings_Ratio,
                 DataColumn.Local_Self_Holdings_Ratio,
                 DataColumn.Local_Investor_Holdings_Ratio,
+                DataColumn.Foreign_Buy_Volume,
+                DataColumn.Local_Investor_Buy_Volume,
+                DataColumn.Local_Self_Buy_Volume,
+                DataColumn.Total_Investor_Buy_Volume
             ],
             fill_missing_date=False
         )
@@ -74,10 +78,22 @@ class BookStrategy(Strategy):
         self.close_sam_5_ = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.close_, 5)
         self.close_sam_10_ = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.close_, 10)
         self.close_sam_20_ = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.close_, 20)
+        self.close_sam_60_ = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.close_, 60)
         
         self.foreign_total_holdings_ratio_sma_ = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.foreign_total_holdings_ratio_, self.config["chip_strategy"]["foreign_total_holdings_ratio_sma_period"])
         self.local_self_holdings_ratio_sma_ = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.local_self_holdings_ratio_, self.config["chip_strategy"]["local_self_holdings_ratio_sma_period"])
         self.local_investor_holdings_ratio_sma_ = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.local_investor_holdings_ratio_, self.config["chip_strategy"]["local_investor_holdings_ratio_sma_period"])
+        
+        buy_short_sam = 5
+        buy_long_sam = 60
+        self.foreign_buy_volume_short_sma = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.foreign_buy_volume_, buy_short_sam)
+        self.local_buy_volume_short_sma = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.local_buy_volume_, buy_short_sam)
+        self.local_self_buy_volume_short_sma = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.local_self_buy_volume_, buy_short_sam)
+        self.total_buy_volume_short_sma = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.total_buy_volume_, buy_short_sam)
+        self.foreign_buy_volume_long_sma = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.foreign_buy_volume_, buy_long_sam)
+        self.local_buy_volume_long_sma = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.local_buy_volume_, buy_long_sam)
+        self.local_self_buy_volume_long_sma = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.local_self_buy_volume_, buy_long_sam)
+        self.total_buy_volume_long_sma = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.total_buy_volume_, buy_long_sam)
 
         twse_code = "Y9999"
         twse_code_idx = market_index_codes.index(twse_code)
@@ -130,7 +146,7 @@ class BookStrategy(Strategy):
             low=self.low_,
             close=self.close_,
         )
-        local_min_array, local_max_array = DataTransformer.get_middle_ex(low=true_low, high=true_high)
+        local_min_array, local_max_array = DataTransformer.get_middle_ex2(low=true_low, high=true_high)
         volume_short_sma_array = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.volume_, volume_short_sma_period)
         volume_long_sma_array = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.volume_, volume_long_sma_period)
 
@@ -156,6 +172,7 @@ class BookStrategy(Strategy):
             low = self.low_[:, code_idx]
             volume = self.volume_[:, code_idx]
             close_sma = self.close_sma_[:, code_idx]
+            close_sam_60 = self.close_sam_60_[:, code_idx]
             relative_strength_sma = self.relative_strength_sma_[:, code_idx]
             market_index_close = self.market_index_[:, 0]
             market_index_sma = self.market_index_sma_[:, 0]
@@ -169,6 +186,15 @@ class BookStrategy(Strategy):
             local_self_holdings_ratio_sma = self.local_self_holdings_ratio_sma_[:, code_idx]
             local_investor_holdings_ratio = self.local_investor_holdings_ratio_[:, code_idx]
             local_investor_holdings_ratio_sma = self.local_investor_holdings_ratio_sma_[:, code_idx]
+            foreign_buy_volume_short_sma = self.foreign_buy_volume_short_sma[:, code_idx]
+            local_buy_volume_short_sma = self.local_buy_volume_short_sma[:, code_idx]
+            local_self_buy_volume_short_sma = self.local_self_buy_volume_short_sma[:, code_idx]
+            total_buy_volume_short_sma = self.total_buy_volume_short_sma[:, code_idx]
+            foreign_buy_volume_long_sma = self.foreign_buy_volume_long_sma[:, code_idx]
+            local_buy_volume_long_sma = self.local_buy_volume_long_sma[:, code_idx]
+            local_self_buy_volume_long_sma = self.local_self_buy_volume_long_sma[:, code_idx]
+            total_buy_volume_long_sma = self.total_buy_volume_long_sma[:, code_idx]
+
             volume_short_sma = volume_short_sma_array[:, code_idx]
             volume_long_sma = volume_long_sma_array[:, code_idx]
             eps = self.eps_[:, code_idx]
@@ -236,13 +262,14 @@ class BookStrategy(Strategy):
                     y=code_idx,
                     local_max_value=local_max_value,
                     next_low_value=next_low_value,
-                    prev_low_value_value=prev_low_value,
+                    prev_low_value=prev_low_value,
                     correction_max_ratio=correction_max_ratio
                 ):
                     continue
 
                 cheat_breakthrough_value = next_low_value + (local_max_value - next_low_value) * cheat_ratio
                 breakthrough_points = np.argwhere(((close >= cheat_breakthrough_value) & (close > close_sma)))
+                breakthrough_points = breakthrough_points[breakthrough_points > next_low_idx+2]
                 breakthrough_points = breakthrough_points[(breakthrough_points > next_low_idx) & (breakthrough_points < next_low_idx+valid_signal_window)]
                 
 
@@ -273,18 +300,31 @@ class BookStrategy(Strategy):
                     eps_array=eps[eps_idx],
                 ):
                     continue
-                
-                if self.filter_recurring_eps(
+
+                if self.filter_chip(
                     x=local_max_idx,
                     y=code_idx,
-                    recurring_eps_array=recurring_eps[recurring_eps_idx]
+                    short_sma=foreign_buy_volume_short_sma[breakthrough_point_idx-1],
+                    long_sma=foreign_buy_volume_long_sma[breakthrough_point_idx-1]
                 ):
                     continue
+
+                # if self.filter_recurring_eps(
+                #     x=local_max_idx,
+                #     y=code_idx,
+                #     recurring_eps_array=recurring_eps[recurring_eps_idx]
+                # ) and self.filter_chip(
+                #     x=local_max_idx,
+                #     y=code_idx,
+                #     local_investor_holdings_ratio=local_investor_holdings_ratio[breakthrough_point_idx-1],
+                #     local_investor_holdings_ratio_sma=local_investor_holdings_ratio_sma[breakthrough_point_idx-1]
+                # ):
+                #     continue
 
                 if self.filter_consolidation_time_window(
                     x=local_max_idx,
                     y=code_idx,
-                    local_max_idx=local_max_idx,
+                    next_low_idx=next_low_idx,
                     breakthrough_point_idx=breakthrough_point_idx,
                     consolidation_time_window=consolidation_time_window
                 ):
@@ -309,13 +349,6 @@ class BookStrategy(Strategy):
                 ):
                     continue
 
-                if self.filter_chip(
-                    x=local_max_idx,
-                    y=code_idx,
-                    local_investor_holdings_ratio=local_investor_holdings_ratio[breakthrough_point_idx-1],
-                    local_investor_holdings_ratio_sma=local_investor_holdings_ratio_sma[breakthrough_point_idx-1]
-                ):
-                    continue
 
                 if self.filter_volume(
                     x=local_max_idx,
@@ -351,42 +384,41 @@ class BookStrategy(Strategy):
 
     def filter_up_min_ratio(self, x, y, local_max_value, prev_low_value, up_min_ratio):
         # 上升超過一定幅度
-        return (local_max_value - prev_low_value) / prev_low_value < up_min_ratio
+        return (local_max_value - prev_low_value) / prev_low_value >= up_min_ratio
 
     def filter_high_before(self, x, y, prev_low_idx, high_array, no_high_before_window, no_high_before_ratio):
         # 上升一段時間前沒有高於當前高點
-        return (high_array[prev_low_idx - no_high_before_window:x] > high_array[x] * (1+no_high_before_ratio)).any()
-
+        return (high_array[prev_low_idx - no_high_before_window:x] <= (high_array[x] * (1+no_high_before_ratio)) ).all()
 
     def filter_correction_max_ratio(self, x, y, local_max_value, next_low_value, prev_low_value, correction_max_ratio):
-        return (local_max_value - next_low_value) > (local_max_value - prev_low_value) * correction_max_ratio
+        return (local_max_value - next_low_value) <= (local_max_value - prev_low_value) * correction_max_ratio
 
     def filter_breakthrough_point(self, x, y, number_of_points):
-        return number_of_points == 0
+        return number_of_points != 0
     
-    def filter_eps(self, x, y, eps_array):
-        return eps_array.size == 0 or eps_array[-1] < 2
+    def filter_eps(self, x, y, eps_array: np.ndarray):
+        return eps_array.size != 0 and (((np.diff(eps_array) / eps_array[1:])[-2:] > 1.5).any() or eps_array[-1] > 4)
     
     def filter_recurring_eps(self, x, y, recurring_eps_array):
-        return recurring_eps_array.size == 0 or recurring_eps_array[-1] < 2
+        return recurring_eps_array.size != 0 and ((np.diff(recurring_eps_array) / recurring_eps_array[1:])[-2:] > 1).any()
 
-    def filter_consolidation_time_window(self, x, y, local_max_idx, breakthrough_point_idx, consolidation_time_window):
-        return breakthrough_point_idx - local_max_idx < consolidation_time_window
+    def filter_consolidation_time_window(self, x, y, next_low_idx, breakthrough_point_idx, consolidation_time_window):
+        return breakthrough_point_idx - next_low_idx > consolidation_time_window
     
     def filter_relative_strength(self, x, y, relative_strength_sma, rs_threshold):
-        return relative_strength_sma < rs_threshold
+        return relative_strength_sma >= rs_threshold
     
     def filter_market_index(self, x, y, market_index_close, market_index_sma, market_index_sma_20, market_index_sma_60, market_index_sma_120):
         return market_index_sma_20 < market_index_sma_60 or market_index_sma_60 < market_index_sma_120
 
-    def filter_chip(self, x, y, local_investor_holdings_ratio, local_investor_holdings_ratio_sma):
-        return not np.isnan(local_investor_holdings_ratio_sma) and local_investor_holdings_ratio < local_investor_holdings_ratio_sma
+    def filter_chip(self, x, y, short_sma, long_sma):
+        return not np.isnan(long_sma) and short_sma > long_sma
 
     def filter_volume(self, x, y, volume, volume_short_sma, volume_long_sma):
-        return volume_short_sma < volume_long_sma
+        return volume_short_sma >= volume_long_sma
 
     def filter_close_above_sma(self, x, y, close, close_sma):
-        return close < close_sma
+        return close >= close_sma
 
     def filter_signal_threshold(self, signal_array, signal_threshold):
         signal_threshold_mask = (signal_array <= signal_threshold) & (signal_array > 0)
@@ -419,7 +451,7 @@ class BookStrategy(Strategy):
             code_idx = codes.index(code)
             
             stop_loss_price = order_record.info["stop_loss_price"]
-            initial_stop_loss_price = order_record.info["initial_stop_loss_price"]
+            entry_price = order_record.order.place_price
 
             if low_price[code_idx] < stop_loss_price:
                 # 處理跌停板的狀況
@@ -435,14 +467,14 @@ class BookStrategy(Strategy):
             # adjust stop loss price if high price is higher than entry price
             # adjust at the end of the day since we don't monitor intra-day price
             new_stop_loss_price = max(
-              initial_stop_loss_price + (high_price[code_idx] - initial_stop_loss_price) * dynamic_stop_loss_range_ratio,
+              stop_loss_price + (high_price[code_idx] - entry_price) * dynamic_stop_loss_range_ratio,
               stop_loss_price
             )
             order_record.info["stop_loss_price"] = new_stop_loss_price
             order_record.info["holding_days"] += 1
 
-            # use sma_20 to stop profit
-            if order_record.info["holding_days"] >= holding_days and close_price[code_idx] < sma_20[code_idx]:
+            # use sma to stop profit
+            if order_record.info["holding_days"] >= holding_days and close_price[code_idx] < sma_10[code_idx]:
                 self.cover_order(
                     order_record.order.order_id,
                     close_price[code_idx],

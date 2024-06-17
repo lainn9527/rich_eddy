@@ -31,7 +31,8 @@ def split_payload(payload: List[any], split_size = 2):
 def replace_null_with_empty(string):
     if type(string) == str:
         string = [string]
-    return list(map(lambda x: x.replace("\x00", "").replace("-", ""), string))
+
+    return list(map(lambda x: x.replace("\x00", "").replace(",-,", ",,"), string))
 
 
 def combine_config(source, target):

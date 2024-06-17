@@ -150,8 +150,6 @@ class DataVisualizer:
         for code in drawing_codes:
             code_idx = codes.index(code)
             code_order_record_df = order_record_df[order_record_df["code"] == code]
-            if len(code_order_record_df) == 0:
-                continue
             data = {
                 "date": dates,
                 "open": open_[:, code_idx],
@@ -278,23 +276,22 @@ class DataVisualizer:
             },
         )
         fig = make_subplots(
-            rows=2,
+            rows=1,
             cols=1,
             shared_xaxes=True,
             vertical_spacing=0.03,
             subplot_titles=("OHLC", "Volume"),
-            row_width=[0.2, 0.7],
-            specs=[[{"secondary_y": True}], [{}]],
+            specs=[[{'secondary_y': True}]],
         )
+
         fig.add_trace(candlestick, secondary_y=False, row=1, col=1)
         fig.add_trace(trace_close, secondary_y=False, row=1, col=1)
-        fig.add_trace(volume_bars, row=2, col=1)
+        # fig.add_trace(volume_bars, secondary_y=True, row=1, col=1)
         fig.update_yaxes(
             secondary_y=False,
             showgrid=True,
         )
         fig.update_layout(
-            # title=get_stock_meta(code),
             xaxis_rangeslider_visible=False,
             xaxis=dict(type="category"),
         )
@@ -425,7 +422,7 @@ class DataVisualizer:
                 y=order_record_df["buy_price"],
                 name="buy",
                 mode="markers",
-                marker=dict(color="green", size=10),
+                marker=dict(color="green", size=15),
             ),
             secondary_y=False,
             row=1,
@@ -437,7 +434,8 @@ class DataVisualizer:
                 y=order_record_df["cover_price"],
                 name="sell",
                 mode="markers",
-                marker=dict(color="red", size=10),
+                marker=dict(color="red", size=15),
+                text=order_record_df["cover_reason"]
             ),
             secondary_y=False,
             row=1,

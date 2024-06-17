@@ -16,14 +16,16 @@ def random_get_codes(n):
     return codes[:n]
 
 def main():
-    result_path = Path("result") / (f"{sys.argv[1]}" if len(sys.argv) > 1 else "local_no_bk")
-    codes = ["2230"]
-    codes = ["2388"]
-    codes = ["2204", "2230", "3017", "3376", "3515", "2388"]
+    result_path = Path("result") / (f"{sys.argv[1]}" if len(sys.argv) > 1 else "book_dy_loss-50_cheat-20_with_finance_filter3")
+    codes = ['3644']
+    codes = random_get_codes(20)
+    codes = ['6167']
+    print(codes)
     # DataVisualizer.visualize_signal_one(codes)
     # DataVisualizer.visualize_order_record(Path("result/20240421_232355/order_record.csv"))
     # DataVisualizer.visualize_local_min_max(codes)
     DataVisualizer.visualize_trend_strategy(codes, result_path)
+    # DataVisualizer.visualize_trend_strategy_tune_result(result_path)
     
 if __name__ == "__main__":
     main()

@@ -22,13 +22,15 @@ def filter_decorator(filter_func):
             # not filtered
             return False
         
-        is_filtered = filter_func(*args, **kwargs)
-        if is_filtered:
+        # filter function is the condition to pass the filter
+        # return value should be "is filtered or not", so add "not"
+        pass_filter = filter_func(*args, **kwargs)
+        if not pass_filter:
             self.filtered_signal_count[filter_func.__name__] += 1
             if "x" in kwargs and "y" in kwargs:
                 self.filtered_reason[kwargs["x"], kwargs["y"]] = self.filtered_reason_mapper[filter_func.__name__]
         
-        return is_filtered
+        return not pass_filter
 
     return wrapper
 

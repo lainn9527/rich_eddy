@@ -11,9 +11,11 @@ import talib
 from src.data_store.data_store import DataStore
 from src.strategy.trend_strategy import TrendStrategy
 from src.strategy.chip_strategy import ChipStrategy
+from src.strategy.book_strategy import BookStrategy
 from src.platform.platform import Platform
 from src.broker.broker import Broker
-from src.config.default import config, tune_config
+from src.config.default import config, tune_config, large_record_config, small_record_config
+from src.config.book_config import book_config
 from src.utils.utils import combine_config
 
 def parse_args():
@@ -175,8 +177,9 @@ def main(arguments: argparse.Namespace, config):
         result_path = Path("result") / arguments.path
     else:
         result_path = arguments.path
-    strategy = TrendStrategy(platform, data_store, cash=cash, config=config)
+    # strategy = TrendStrategy(platform, data_store, cash=cash, config=config)
     # strategy = ChipStrategy(platform, data_store, cash=cash, config=config)
+    strategy = BookStrategy(platform, data_store, cash=cash, config=config)
     platform.run(strategy, start_date, end_date, result_path, full_record=arguments.record)
 
 
@@ -184,7 +187,7 @@ if __name__ == "__main__":
     args = parse_args()
     print(datetime.now())
     if args.mode == "run":
-        main(args, combine_config(config["parameter"], tune_config))
+        main(args, combine_config(config["parameter"], book_config))
     elif args.mode == "tune" or args.mode == "random_tune":
         tune(args)
     print(datetime.now())

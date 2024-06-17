@@ -287,31 +287,31 @@ class TrendStrategy(Strategy):
 
     def filter_up_min_ratio(self, x, y, local_max_value, prev_low, up_min_ratio):
         # 上升超過一定幅度
-        return (local_max_value - prev_low) / prev_low < up_min_ratio
+        return (local_max_value - prev_low) / prev_low > up_min_ratio
 
     def filter_down_max_ratio(self, x, y, local_max_value, next_low_value, down_max_ratio):
-        return (local_max_value - next_low_value) / local_max_value > down_max_ratio
+        return (local_max_value - next_low_value) / local_max_value < down_max_ratio
 
     def filter_breakthrough_point(self, x, y, number_of_points):
-        return number_of_points == 0
+        return number_of_points != 0
 
     def filter_consolidation_time_window(self, x, y, local_max_idx, breakthrough_point_idx, consolidation_time_window):
-        return breakthrough_point_idx - local_max_idx < consolidation_time_window
+        return breakthrough_point_idx - local_max_idx > consolidation_time_window
     
     def filter_relative_strength(self, x, y, relative_strength_sma, rs_threshold):
-        return relative_strength_sma < rs_threshold
+        return relative_strength_sma > rs_threshold
     
     def filter_market_index(self, x, y, market_index_close, market_index_sma):
-        return market_index_close < market_index_sma
+        return market_index_close > market_index_sma
 
     def filter_chip(self, x, y, local_investor_holdings_ratio, local_investor_holdings_ratio_sma):
-        return not np.isnan(local_investor_holdings_ratio_sma) and local_investor_holdings_ratio < local_investor_holdings_ratio_sma
+        return not np.isnan(local_investor_holdings_ratio_sma) and local_investor_holdings_ratio > local_investor_holdings_ratio_sma
 
     def filter_volume(self, x, y, volume, volume_short_sma, volume_long_sma):
-        return volume_short_sma < volume_long_sma
+        return volume_short_sma > volume_long_sma
 
     def filter_close_above_sma(self, x, y, close, close_sma):
-        return close < close_sma
+        return close > close_sma
 
     def filter_signal_threshold(self, signal_array, signal_threshold):
         signal_threshold_mask = (signal_array <= signal_threshold) & (signal_array > 0)
@@ -344,9 +344,11 @@ class TrendStrategy(Strategy):
             stop_loss_price = order_record.info["stop_loss_price"]
 
             if low_price[code_idx] < stop_loss_price:
+                # 處理跌停板的狀況
+                real_stop_loss_price = min(stop_loss_price, high_price[code_idx])
                 self.cover_order(
                     order_record.order.order_id,
-                    stop_loss_price,
+                    real_stop_loss_price,
                     order_record.order.volume,
                     "stop_loss"
                 )
@@ -354,16 +356,16 @@ class TrendStrategy(Strategy):
 
             order_record.info["holding_days"] += 1
 
-            if close_price[code_idx] < sma_20[code_idx] or sma_10[code_idx] < sma_20[code_idx]:
-                self.cover_order(
-                    order_record.order.order_id,
-                    close_price[code_idx],
-                    order_record.order.volume,
-                    "sma_cross"
-                )
-                continue
+            # if close_price[code_idx] < sma_20[code_idx] or sma_10[code_idx] < sma_20[code_idx]:
+            #     self.cover_order(
+            #         order_record.order.order_id,
+            #         close_price[code_idx],
+            #         order_record.order.volume,
+            #         "sma_cross"
+            #     )
+            #     continue
 
-            if order_record.info["holding_days"] >= holding_days and order_record.book_profit_loss_rate < 10:
+            if order_record.info["holding_days"] >= holding_days:
                 self.cover_order(
                     order_record.order.order_id,
                     close_price[code_idx],

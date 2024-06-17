@@ -16,7 +16,8 @@ class TejDataProcessor(BaseDataProcessor):
         cls,
         data_category: DataCategory,
         raw_data_dir: Path,
-        dest_data_dir: Path
+        dest_data_dir: Path,
+        encoding: str = None,
     ):
         """
         1. read tej raw data
@@ -32,7 +33,7 @@ class TejDataProcessor(BaseDataProcessor):
         # read tej raw data
         for file_name in file_names:
             file_path = raw_data_dir / file_name
-            with open(file_path, "r", encoding="cp950") as fp:
+            with open(file_path, "r", encoding=encoding) as fp:
                 lines = cls.remove_null_token(fp.readlines(), ["\x00", "-"])
                 lines = list(csv.reader(lines))
                 for line in lines[1:]:

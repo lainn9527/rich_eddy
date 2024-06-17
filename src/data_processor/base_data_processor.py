@@ -84,7 +84,10 @@ class BaseDataProcessor:
 
         for idx, line in enumerate(lines):
             for token in null_tokens:
-                line = line.replace(token, "")
+                if token == '-':
+                  line = line.replace(",-,", ",,")
+                else:                    
+                  line = line.replace(token, "")
             lines[idx] = line
 
         return lines
