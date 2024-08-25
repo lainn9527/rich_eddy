@@ -236,6 +236,7 @@ class Strategy:
         volume: float,
         side: OrderSide,
         info: Dict = None,
+        custom_record_field: Dict = {},
     ) -> None:
         order: Order = self.platform.place_order(
             market,
@@ -265,6 +266,7 @@ class Strategy:
             net_profit_loss=net_profit_loss,
             info=info,
             book_price=price,
+            custom_record_field=custom_record_field,
         )
 
         self.holdings[order.order_id] = order_record
@@ -362,6 +364,9 @@ class Strategy:
         order_records = list(self.order_record_dict.values())
         sorted_order_records = sorted(order_records, key=lambda x: x.order.execute_time)
         order_record_rows = [TradingResultColumn.trading_record]
+        if len(sorted_order_records) > 0:
+            order_record_rows[0].append(*(sorted_order_records[0].custom_record_field.keys()))
+
         for order_record in sorted_order_records:
             for cover_order in order_record.cover_order:
                 order_record_rows.append([
@@ -379,6 +384,7 @@ class Strategy:
                     (cover_order.execute_time - order_record.order.execute_time).days,
                     f"{order_record.net_profit_loss_rate / ((cover_order.execute_time - order_record.order.execute_time).days+1):.2f}",
                     order_record.cover_reason,
+                    *(order_record.custom_record_field.values()),
                 ])
 
         # account history

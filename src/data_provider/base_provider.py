@@ -7,7 +7,7 @@ from multiprocessing import Pool
 
 import numpy as np
 
-from src.utils.common import DataCategory, DataColumn, Instrument, Market
+from src.utils.common import DataCategory, DataColumn, Instrument, Market, ColumnValueMapper
 from src.utils.utils import split_payload, replace_null_with_empty
 from src.utils.redis_client import RedisClient
 
@@ -229,6 +229,9 @@ class BaseProvider:
                 for build_column_name in build_column_names:
                     idx = self.column_names.index(build_column_name)
                     value = row[idx]
+                    column_value_mapper = ColumnValueMapper.get_column_value_mapper(build_column_name)
+                    if column_value_mapper != None:
+                        value = column_value_mapper[value]
                     code_idx = code_idx_map[code]
                     self.np_array_column[build_column_name][i][code_idx] = value
 

@@ -111,10 +111,10 @@ class TejDataProcessor(BaseDataProcessor):
                     valid_stock_info = [lines[0]]
                     for line in lines[1:]:
                         code = line[0]
-                        if TejDataProcessor.is_valid_stock(code):
+                        if cls.is_valid_stock(code):
                             valid_stock_info.append(line)
 
-                    processed_lines = TejDataProcessor.pick_columns(
+                    processed_lines = cls.pick_columns(
                         valid_stock_info,
                         DataCategoryColumn.get_columns(data_category),
                         cls.tej_column_name_mapper[data_category.value]
@@ -155,6 +155,7 @@ class TejDataProcessor(BaseDataProcessor):
             "trading_value": "成交值(千元)",
             "total_stocks": "流通在外股數(千股)",
             "market_value": "市值(百萬元)",
+            "market_type": "市場別",
         },
         "finance_report": {
             "code": "股票代碼",

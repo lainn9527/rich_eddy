@@ -85,7 +85,8 @@ class DataVisualizer:
             data_columns=[DataColumn.Open, DataColumn.High, DataColumn.Low, DataColumn.Close, DataColumn.Volume],
             selected_codes=codes,
         )
-        local_min_, local_max_ = DataTransformer.get_middle_ex(low_, high_)
+        local_min_, local_max_ = DataTransformer.get_local_ex(low_, high_)
+        middle_min_, middle_max_ = DataTransformer.get_middle_ex(low_, high_)
         for code in codes:
             code_idx = trading_codes.index(code)
             data = {
@@ -99,19 +100,22 @@ class DataVisualizer:
                 "local_max": local_max_[:, code_idx],
             }
             fig = DataVisualizer.plot_local_min_max(code, data)
+            data["local_max"] = middle_max_[:, code_idx]
+            data["local_min"] = middle_min_[:, code_idx]
+            fig = DataVisualizer.plot_local_min_max(code, data, fig)
             fig.show(config=plotly_config)
+
+    def group_signal_by_codes(signal_objects, codes):
+        code_signal_dict = {}
+        for signal_object in signal_objects:
+            code = codes[signal_object["code_idx"]]
+            if code not in code_signal_dict:
+                code_signal_dict[code] = []
+            code_signal_dict[code].append(signal_object)
+        return code_signal_dict
 
 
     def visualize_trend_strategy(drawing_codes: List[str], result_dir: Path):
-        def group_signal_by_codes(signal_objects):
-            code_signal_dict = {}
-            for signal_object in signal_objects:
-                code = codes[signal_object["code_idx"]]
-                if code not in code_signal_dict:
-                    code_signal_dict[code] = []
-                code_signal_dict[code].append(signal_object)
-            return code_signal_dict
-
         with open(result_dir / "analyze_material.json", "r") as fp:
             analyze_material = json.load(fp)
         
@@ -143,8 +147,8 @@ class DataVisualizer:
         close_120_sma = data_store.get_technical_indicator(TechnicalIndicator.SMA, close_, 120)
 
         # group signal by codes
-        code_signal_dict = group_signal_by_codes(signal_objects)
-        code_failure_breakthrough_dict = group_signal_by_codes(failure_breakthrough_objects)
+        code_signal_dict = DataVisualizer.group_signal_by_codes(signal_objects, codes)
+        code_failure_breakthrough_dict = DataVisualizer.group_signal_by_codes(failure_breakthrough_objects, codes)
 
         
         for code in drawing_codes:
@@ -172,7 +176,76 @@ class DataVisualizer:
 
             fig = DataVisualizer.basic_plot_stock(code, data)
             fig = DataVisualizer.plot_trend_strategy(code, data, fig)
-            fig = DataVisualizer.plot_local_min_max(code, data, fig)
+            # fig = DataVisualizer.plot_local_min_max(code, data, fig)
+            fig = DataVisualizer.plot_correct_local_min_max(code, data, fig)
+            fig = DataVisualizer.plot_filtered_reason(code, data, fig)
+            fig = DataVisualizer.plot_order_record(code, data, code_order_record_df, fig)
+            fig = DataVisualizer.plot_sma(code, data, fig)
+            fig.show(config=plotly_config)
+
+
+    def visualize_book_strategy(drawing_codes: List[str], result_dir: Path):
+        with open(result_dir / "analyze_material.json", "r") as fp:
+            analyze_material = json.load(fp)
+        
+        order_record_df = pd.read_csv(result_dir / "order_record.csv", header=0, parse_dates=[1, 6, 7])
+        order_record_df["code"] = order_record_df["code"].astype(str)
+
+        start_date = datetime.fromisoformat(analyze_material["start_date"])
+        end_date = datetime.fromisoformat(analyze_material["end_date"])
+        local_min = np.array(analyze_material["local_min"])
+        local_max = np.array(analyze_material["local_max"])
+        filtered_reason = np.array(analyze_material["filtered_reason"])
+        filtered_reason_mapper = analyze_material["filtered_reason_mapper"]
+        signal_objects = analyze_material["signal_objects"]        
+        failure_breakthrough_objects = analyze_material["failure_breakthrough_objects"]
+
+        data_store = DataStore()
+        [open_, high_, low_, close_, volume_], dates, codes = data_store.get_data(
+            market=Market.TW,
+            instrument=Instrument.Stock,
+            data_category=DataCategory.Daily_Price,
+            data_columns=[DataColumn.Open, DataColumn.High, DataColumn.Low, DataColumn.Close, DataColumn.Volume],
+            start_date=start_date,
+            end_date=end_date
+        )
+        close_5_sma = data_store.get_technical_indicator(TechnicalIndicator.SMA, close_, 5)
+        close_10_sma = data_store.get_technical_indicator(TechnicalIndicator.SMA, close_, 10)
+        close_20_sma = data_store.get_technical_indicator(TechnicalIndicator.SMA, close_, 20)
+        close_60_sma = data_store.get_technical_indicator(TechnicalIndicator.SMA, close_, 60)
+        close_120_sma = data_store.get_technical_indicator(TechnicalIndicator.SMA, close_, 120)
+
+        # group signal by codes
+        code_signal_dict = DataVisualizer.group_signal_by_codes(signal_objects, codes)
+        code_failure_breakthrough_dict = DataVisualizer.group_signal_by_codes(failure_breakthrough_objects, codes)
+
+        
+        for code in drawing_codes:
+            code_idx = codes.index(code)
+            code_order_record_df = order_record_df[order_record_df["code"] == code]
+            data = {
+                "date": dates,
+                "open": open_[:, code_idx],
+                "high": high_[:, code_idx],
+                "low": low_[:, code_idx],
+                "close": close_[:, code_idx],
+                "volume": volume_[:, code_idx],
+                "local_min": local_min[:, code_idx],
+                "local_max": local_max[:, code_idx],
+                "filtered_reason": filtered_reason[:, code_idx],
+                "filtered_reason_mapper": filtered_reason_mapper,
+                "signal": code_signal_dict[code] if code in code_signal_dict else [],
+                "failure_breakthrough": code_failure_breakthrough_dict[code] if code in code_failure_breakthrough_dict else [],
+                "sma_5": close_5_sma[:, code_idx],
+                "sma_10": close_10_sma[:, code_idx],
+                "sma_20": close_20_sma[:, code_idx],
+                "sma_60": close_60_sma[:, code_idx],
+                "sma_120": close_120_sma[:, code_idx],
+            }
+
+            fig = DataVisualizer.basic_plot_stock(code, data)
+            fig = DataVisualizer.plot_book_strategy(code, data, fig)
+            fig = DataVisualizer.plot_correct_local_min_max(code, data, fig)
             fig = DataVisualizer.plot_filtered_reason(code, data, fig)
             fig = DataVisualizer.plot_order_record(code, data, code_order_record_df, fig)
             fig = DataVisualizer.plot_sma(code, data, fig)
@@ -287,15 +360,16 @@ class DataVisualizer:
         fig.add_trace(candlestick, secondary_y=False, row=1, col=1)
         fig.add_trace(trace_close, secondary_y=False, row=1, col=1)
         # fig.add_trace(volume_bars, secondary_y=True, row=1, col=1)
-        fig.update_yaxes(
-            secondary_y=False,
-            showgrid=True,
-        )
         fig.update_layout(
             xaxis_rangeslider_visible=False,
             xaxis=dict(type="category"),
         )
         fig.update_xaxes(matches="x")
+        fig.update_yaxes(
+            tickangle=90,
+            secondary_y=False,
+            showgrid=True,
+        )
         return fig
 
 
@@ -361,15 +435,71 @@ class DataVisualizer:
             )
         return fig
 
+    def plot_book_strategy(code, draw_df: Dict[str, any], fig):
+        signals = draw_df["signal"]
+        failure_breakthrough = draw_df["failure_breakthrough"]
+
+        for signal in signals:
+            signal_idx = signal["signal_idx"]
+            start_max_idx = signal["start_max_idx"]
+            middle_min_idx = signal["middle_min_idx"]
+            signal_detected_idx = signal["signal_detected_idx"]
+            fig.add_trace(
+                go.Scatter(
+                    x=[draw_df["date"][start_max_idx], draw_df["date"][middle_min_idx], draw_df["date"][signal_idx]],
+                    y=[draw_df["high"][start_max_idx], draw_df["low"][middle_min_idx], draw_df["close"][signal_idx]],
+                    mode="lines",
+                    line=dict(color="yellow", width=3),
+                ),
+                secondary_y=False,
+                row=1,
+                col=1,
+            )
+
+        signal_detected_idxes = [signal["signal_detected_idx"] for signal in signals]
+        fig.add_trace(
+            go.Scatter(
+                x=np.array(draw_df['date'])[signal_detected_idxes],
+                y=draw_df['close'][signal_detected_idxes],
+                name="signal_detected",
+                mode="markers",
+                marker=dict(size=10),
+            ),
+            secondary_y=False,
+            row=1,
+            col=1,
+        )
+
+        for signal in failure_breakthrough:
+            signal_idx = signal["signal_idx"]
+            start_max_idx = signal["start_max_idx"]
+            middle_min_idx = signal["middle_min_idx"]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[draw_df["date"][start_max_idx],  draw_df["date"][signal_idx]],
+                    y=[draw_df["high"][start_max_idx], draw_df["close"][signal_idx]],
+                    mode="lines",
+                    name="failure_breakthrough",
+                    line=dict(color="red", width=3),
+                ),
+                secondary_y=False,
+                row=1,
+                col=1,
+            )
+        return fig
+
 
     def plot_local_min_max(code, draw_df: Dict[str, np.ndarray], fig = None):
+        if fig == None:
+            fig = DataVisualizer.basic_plot_stock(code, draw_df)
         fig.add_trace(
             go.Scatter(
                 x=np.array(draw_df['date'])[draw_df['local_min']],
                 y=draw_df['low'][draw_df['local_min']],
                 name="local_min",
                 mode="markers",
-                marker=dict(color="blue", size=10),
+                marker=dict(size=10),
             ),
             secondary_y=False,
             row=1,
@@ -381,8 +511,38 @@ class DataVisualizer:
                 y=draw_df['high'][draw_df['local_max']],
                 name="local_max",
                 mode="markers",
-                marker=dict(color="purple", size=10),
+                marker=dict(size=10),
                 text=[i for i in range(draw_df['local_max'].sum())],
+            ),
+            secondary_y=False,
+            row=1,
+            col=1,
+        )
+
+        return fig
+    
+    def plot_correct_local_min_max(code, draw_df: Dict[str, np.ndarray], fig = None):
+        if fig == None:
+            fig = DataVisualizer.basic_plot_stock(code, draw_df)
+        fig.add_trace(
+            go.Scatter(
+                x=np.array(draw_df['date'])[draw_df['local_min'] != -1],
+                y=draw_df['low'][draw_df['local_min'] != -1],
+                name="local_min",
+                mode="markers",
+                marker=dict(size=10, color="blue"),
+            ),
+            secondary_y=False,
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=np.array(draw_df['date'])[draw_df['local_max'] != -1],
+                y=draw_df['high'][draw_df['local_max'] != -1],
+                name="local_max",
+                mode="markers",
+                marker=dict(size=10, color="purple"),
             ),
             secondary_y=False,
             row=1,
@@ -428,6 +588,7 @@ class DataVisualizer:
             row=1,
             col=1,
         )
+        cover_order_texts = [f'{row["return_rate"]:.2f}_{row["profit_loss"]:.2f}_{row["holding_days"]}_{row["cover_reason"]}' for _, row in order_record_df.iterrows()]
         fig.add_trace(
             go.Scatter(
                 x=order_record_df["cover_date"],
@@ -435,7 +596,7 @@ class DataVisualizer:
                 name="sell",
                 mode="markers",
                 marker=dict(color="red", size=15),
-                text=order_record_df["cover_reason"]
+                text=cover_order_texts
             ),
             secondary_y=False,
             row=1,

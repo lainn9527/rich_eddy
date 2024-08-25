@@ -5,8 +5,7 @@ import numpy as np
 from src.data_provider.base_provider import BaseProvider
 from src.data_store.data_store import DataStore
 from src.platform.platform import Platform
-from src.utils.common import DataCategory, Instrument, Market, OrderSide, DataColumn, TechnicalIndicator
-from src.utils.order import CoverOrderRecord, OrderRecord
+from src.utils.common import DataCategory, Instrument, Market, OrderSide, DataColumn, TechnicalIndicator, ColumnValueMapper
 from src.strategy.strategy import Strategy
 from src.data_transformer.data_transformer import DataTransformer
 
@@ -24,11 +23,11 @@ class BookStrategy(Strategy):
 
     def prepare_data(self, start_date: datetime, end_date: datetime):
         data_start_date = start_date - timedelta(days=250)  # extract more data for technical indicator
-        [self.open_, self.high_, self.low_, self.close_, self.volume_], dates, codes = self.data_store.get_data(
+        [self.open_, self.high_, self.low_, self.close_, self.volume_, self.market_type_], dates, codes = self.data_store.get_data(
             market=Market.TW,
             instrument=Instrument.Stock,
             data_category=DataCategory.Daily_Price,
-            data_columns=[DataColumn.Open, DataColumn.High, DataColumn.Low, DataColumn.Close, DataColumn.Volume],
+            data_columns=[DataColumn.Open, DataColumn.High, DataColumn.Low, DataColumn.Close, DataColumn.Volume, DataColumn.MARKET_TYPE],
             start_date=data_start_date,
             end_date=end_date,
         )
@@ -108,7 +107,7 @@ class BookStrategy(Strategy):
         self.market_index_sma_120_ = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.market_index_, 120)
 
         # local min & max array
-        self.signal_one_, self.initial_stop_loss_price_ ,analyze_material = self.get_signal_with_filter()
+        self.signal_one_, self.initial_stop_loss_price_ ,analyze_material = self.get_correct_signal()
         analyze_material.update({
             "start_date": data_start_date.isoformat(),
             "end_date": end_date.isoformat()
@@ -119,7 +118,7 @@ class BookStrategy(Strategy):
 
         return analyze_material
 
-    def get_signal_with_filter(self):
+    def get_correct_signal(self):
         strategy_one_config = self.config["strategy_one"]
         volume_avg_time_window = strategy_one_config["volume_avg_time_window"]
         volume_avg_threshold = strategy_one_config["volume_avg_threshold"]
@@ -146,7 +145,7 @@ class BookStrategy(Strategy):
             low=self.low_,
             close=self.close_,
         )
-        local_min_array, local_max_array = DataTransformer.get_middle_ex2(low=true_low, high=true_high)
+        local_min_array, local_max_array = DataTransformer.get_correct_ex(low=true_low, high=true_high)
         volume_short_sma_array = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.volume_, volume_short_sma_period)
         volume_long_sma_array = self.data_store.get_technical_indicator(TechnicalIndicator.SMA, self.volume_, volume_long_sma_period)
 
@@ -157,7 +156,7 @@ class BookStrategy(Strategy):
         signal_objects = []
         failure_breakthrough_objects = []
         total_signal = 0
-        self.filtered_reason = local_max_array.astype(int).copy()
+        self.filtered_reason = (local_max_array != -1).astype(int).copy()
 
         debug_code = ''
         debug_time = ''
@@ -171,6 +170,7 @@ class BookStrategy(Strategy):
             high = self.high_[:, code_idx]
             low = self.low_[:, code_idx]
             volume = self.volume_[:, code_idx]
+            market_type = self.market_type_[:, code_idx]
             close_sma = self.close_sma_[:, code_idx]
             close_sam_60 = self.close_sam_60_[:, code_idx]
             relative_strength_sma = self.relative_strength_sma_[:, code_idx]
@@ -200,29 +200,28 @@ class BookStrategy(Strategy):
             eps = self.eps_[:, code_idx]
             recurring_eps = self.recurring_eps_[:, code_idx]
 
-            all_local_min_idx_list = np.argwhere(local_min == True).reshape(-1)
-            all_local_max_idx_list = np.argwhere(local_max == True).reshape(-1)
+            all_local_min_idx_list = np.argwhere(local_min != -1).reshape(-1)
+            all_local_max_idx_list = np.argwhere(local_max != -1).reshape(-1)
 
             # > up_time_window (上升一段時間)
             local_min_idx_list = all_local_min_idx_list[all_local_min_idx_list > up_time_window]
             local_max_idx_list = all_local_max_idx_list[all_local_max_idx_list > up_time_window]
 
             for i, local_max_idx in enumerate(local_max_idx_list):
+                if local_max_idx == close.shape[0] - 1:
+                    continue
+                
+                if market_type[local_max_idx] != 0 and market_type[local_max_idx] != 1:
+                    continue
+
                 if debug_time == local_max_idx:
                     local_max_idx
 
                 total_signal += 1
+                local_max_detected_idx = local_max[local_max_idx]
                 local_max_value = high[local_max_idx]
                 
-                # prev_low_array = local_min_idx_list[np.argwhere(local_min_idx_list < local_max_idx).reshape(-1)]
-                # if len(prev_low_array) == 0:
-                #     prev_low_idx = low[local_max_idx - up_time_window: local_max_idx + 1].argmin() + local_max_idx - up_time_window
-                #     prev_low_value = low[prev_low_idx]
-                # else:
-                #     prev_low_idx = prev_low_array[-1]
-                #     prev_low_value = low[prev_low_idx]
-
-                prev_low_idx = low[local_max_idx - up_time_window: local_max_idx + 1].argmin() + local_max_idx - up_time_window
+                prev_low_idx = low[local_max_idx - up_time_window: local_max_idx].argmin() + local_max_idx - up_time_window
                 prev_low_value = low[prev_low_idx]
 
 
@@ -248,12 +247,14 @@ class BookStrategy(Strategy):
                     continue
 
                 # 下降 (找到下一個最低點)
-                next_low_array = local_min_idx_list[np.argwhere(local_min_idx_list > local_max_idx).reshape(-1)]
-                if len(next_low_array) == 0 or next_low_array[0] > local_max_idx + correction_max_time_window:
-                    next_low_idx = local_max_idx + low[local_max_idx:local_max_idx+correction_max_time_window+1].argmin()
+                # use next low if it's within local_max_idx - local_max_detected_idx
+                signal_detected_idx = max(local_max_idx + correction_max_time_window, local_max_detected_idx)
+                next_low_array = local_min_idx_list[np.argwhere((local_min_idx_list > local_max_idx) & (local_min_idx_list < signal_detected_idx)).reshape(-1)]
+                if next_low_array.size != 0 and local_min[next_low_array[0]] < signal_detected_idx:
+                    next_low_idx = next_low_array[0]
                     next_low_value = low[next_low_idx]
                 else:
-                    next_low_idx = next_low_array[0]
+                    next_low_idx = local_max_idx + low[local_max_idx+1:signal_detected_idx+1].argmin()
                     next_low_value = low[next_low_idx]
 
                 # 下降超過最大幅度則跳過
@@ -268,17 +269,21 @@ class BookStrategy(Strategy):
                     continue
 
                 cheat_breakthrough_value = next_low_value + (local_max_value - next_low_value) * cheat_ratio
-                breakthrough_points = np.argwhere(((close >= cheat_breakthrough_value) & (close > close_sma)))
-                breakthrough_points = breakthrough_points[breakthrough_points > next_low_idx+2]
-                breakthrough_points = breakthrough_points[(breakthrough_points > next_low_idx) & (breakthrough_points < next_low_idx+valid_signal_window)]
+                valid_breakthrough_points = np.argwhere(((close >= cheat_breakthrough_value) & (close > close_sma)))
+                breakthrough_points = valid_breakthrough_points[
+                    (valid_breakthrough_points >= signal_detected_idx) &
+                    (valid_breakthrough_points >= next_low_idx + consolidation_time_window) &
+                    (valid_breakthrough_points < signal_detected_idx+valid_signal_window)
+                ]
                 
 
                 if self.filter_breakthrough_point(
                     x=local_max_idx,
                     y=code_idx,
-                    number_of_points=len(breakthrough_points)
+                    breakthrough_points=breakthrough_points
                 ):
                     continue
+
                 
                 breakthrough_point_idx = breakthrough_points[0]
                 signal_object = {
@@ -286,9 +291,21 @@ class BookStrategy(Strategy):
                     "signal_idx": breakthrough_point_idx,
                     "start_max_idx": local_max_idx,
                     "middle_min_idx": next_low_idx,
+                    "signal_detected_idx": signal_detected_idx
                 }
                 failure_breakthrough_objects.append(signal_object)
 
+                early_breakthrough_point_idxs = valid_breakthrough_points[
+                    (valid_breakthrough_points >= next_low_idx) &
+                    (valid_breakthrough_points < signal_detected_idx)
+                ]
+                if self.filter_early_breakthrough(
+                    x=local_max_idx,
+                    y=code_idx,
+                    early_breakthrough_point_values=high[local_max_idx+1:breakthrough_point_idx],
+                    local_max_value = local_max_value,
+                ):
+                    continue
 
                 # filter eps & recurring eps
                 eps_idx = np.argwhere(~(np.isnan(eps[:breakthrough_point_idx]))).reshape(-1)
@@ -309,17 +326,6 @@ class BookStrategy(Strategy):
                 ):
                     continue
 
-                # if self.filter_recurring_eps(
-                #     x=local_max_idx,
-                #     y=code_idx,
-                #     recurring_eps_array=recurring_eps[recurring_eps_idx]
-                # ) and self.filter_chip(
-                #     x=local_max_idx,
-                #     y=code_idx,
-                #     local_investor_holdings_ratio=local_investor_holdings_ratio[breakthrough_point_idx-1],
-                #     local_investor_holdings_ratio_sma=local_investor_holdings_ratio_sma[breakthrough_point_idx-1]
-                # ):
-                #     continue
 
                 if self.filter_consolidation_time_window(
                     x=local_max_idx,
@@ -360,7 +366,7 @@ class BookStrategy(Strategy):
                     continue
 
                 signal_array[breakthrough_point_idx, code_idx] += 1
-                initial_stop_loss_price_array[breakthrough_point_idx, code_idx] = min(next_low_value, close[breakthrough_point_idx] * (1 - init_stop_loss_ratio))
+                initial_stop_loss_price_array[breakthrough_point_idx, code_idx] = max(next_low_value, close[breakthrough_point_idx] * (1 - init_stop_loss_ratio))
                 signal_objects.append(signal_object)
                 failure_breakthrough_objects.pop()
 
@@ -393,8 +399,11 @@ class BookStrategy(Strategy):
     def filter_correction_max_ratio(self, x, y, local_max_value, next_low_value, prev_low_value, correction_max_ratio):
         return (local_max_value - next_low_value) <= (local_max_value - prev_low_value) * correction_max_ratio
 
-    def filter_breakthrough_point(self, x, y, number_of_points):
-        return number_of_points != 0
+    def filter_breakthrough_point(self, x, y, breakthrough_points):
+        return breakthrough_points.size != 0
+
+    def filter_early_breakthrough(self, x, y, early_breakthrough_point_values, local_max_value):
+        return early_breakthrough_point_values.size == 0 or early_breakthrough_point_values.max() < local_max_value
     
     def filter_eps(self, x, y, eps_array: np.ndarray):
         return eps_array.size != 0 and (((np.diff(eps_array) / eps_array[1:])[-2:] > 1.5).any() or eps_array[-1] > 4)
@@ -415,7 +424,7 @@ class BookStrategy(Strategy):
         return not np.isnan(long_sma) and short_sma > long_sma
 
     def filter_volume(self, x, y, volume, volume_short_sma, volume_long_sma):
-        return volume_short_sma >= volume_long_sma
+        return volume < volume_short_sma or volume < volume_long_sma
 
     def filter_close_above_sma(self, x, y, close, close_sma):
         return close >= close_sma
@@ -441,6 +450,7 @@ class BookStrategy(Strategy):
         close_price = self.close_[-1]
         signal_one = self.signal_one_[-1]
         initial_stop_loss_price_array = self.initial_stop_loss_price_[-1]
+        market_type = self.market_type_[-1]
         sma_5 = self.close_sam_5_[-1]
         sma_10 = self.close_sam_10_[-1]
         sma_20 = self.close_sam_20_[-1]
@@ -474,14 +484,14 @@ class BookStrategy(Strategy):
             order_record.info["holding_days"] += 1
 
             # use sma to stop profit
-            if order_record.info["holding_days"] >= holding_days and close_price[code_idx] < sma_10[code_idx]:
-                self.cover_order(
-                    order_record.order.order_id,
-                    close_price[code_idx],
-                    order_record.order.volume,
-                    "sma_cross"
-                )
-                continue
+            # if order_record.info["holding_days"] >= holding_days and close_price[code_idx] < sma_10[code_idx]:
+            #     self.cover_order(
+            #         order_record.order.order_id,
+            #         close_price[code_idx],
+            #         order_record.order.volume,
+            #         "sma_cross"
+            #     )
+            #     continue
 
             # if order_record.info["holding_days"] >= holding_days:
             #     self.cover_order(
@@ -509,5 +519,6 @@ class BookStrategy(Strategy):
                 price=price,
                 volume=volume,
                 side=OrderSide.Buy,
-                info={"stop_loss_price": stop_loss_price, "initial_stop_loss_price": stop_loss_price, "holding_days": 0}
+                info={"stop_loss_price": stop_loss_price, "initial_stop_loss_price": stop_loss_price, "holding_days": 0},
+                custom_record_field={"market_type": ColumnValueMapper.get_reversed_column_value_mapper(DataColumn.MARKET_TYPE)[int(market_type[idx])]}
             )

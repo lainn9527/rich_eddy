@@ -24,7 +24,7 @@ class DataTransformer:
         min_array = np.concatenate([
             np.full((1, low.shape[1]), False),
             min_array,
-            np.reshape(argmin_array[-1] == 2, (1, low.shape[1])),
+            np.full((1, low.shape[1]), False),
         ], axis=0)
 
         argmax_array = sliding_window_view(high, 3, axis=0).argmax(axis=2)
@@ -113,6 +113,64 @@ class DataTransformer:
         return min_array, max_array
 
 
+    def get_correct_ex(low: np.ndarray, high: np.ndarray, level: int = 1):
+        def transform_middle_ex(local_array: np.ndarray, value: np.ndarray, ex_type: str):
+            abs_ex_ratio = 0.1
+            debug = -1
+            local_array = local_array.copy().astype(int)
+            for i in range(value.shape[1]):
+                if i == debug:
+                    debug
+                local_filter = local_array[:, i]
+                local_idx = np.argwhere(local_filter == True).reshape(-1)
+                local_value = value[local_idx, i]
+                if len(local_value) < 3:
+                    continue
+                if ex_type == "min":
+                    arg_array = sliding_window_view(local_value, 3, axis=0).argmin(axis=1)
+                    abs_ex_filter = np.concatenate([[0.0], np.diff(local_value)]) / local_value < -abs_ex_ratio
+                elif ex_type == "max":
+                    arg_array = sliding_window_view(local_value, 3, axis=0).argmax(axis=1)
+                    abs_ex_filter = np.concatenate([[0.0], np.diff(local_value)]) / local_value > abs_ex_ratio
+                middle_array = arg_array == 1
+                signal_detected_idx = local_idx[2:][middle_array] + 1
+                augmented_middle_array = np.concatenate([[False], middle_array, [False]], axis=0)
+                middle_idx = local_idx[augmented_middle_array]
+                local_filter[:] = -1
+                local_filter[middle_idx] = signal_detected_idx
+                local_filter[local_idx[abs_ex_filter]] = local_idx[abs_ex_filter]
+            return local_array
+
+        min_array, max_array = DataTransformer.get_local_ex(low, high)
+        while level != 0:
+            min_array = transform_middle_ex(min_array, low, "min")
+            max_array = transform_middle_ex(max_array, high, "max")
+            level -= 1
+        
+        # # remove noise
+        # prev_signal = np.full((low.shape[1]), 0.0) # 0: no signal, 1: max, 2: min
+        # prev_signal_idx = np.full((low.shape[1]), -1)
+        # prev_signal_value = np.full((low.shape[1]), 0.0)
+        # for i in range(1, len(min_array)):
+        #     cur_max_signal = max_array[i]
+        #     cur_max_signal_value = high[i]
+        #     redundant_max_signal = (cur_max_signal == True) & (prev_signal == 1) & (cur_max_signal_value > prev_signal_value)
+        #     max_array[prev_signal_idx[redundant_max_signal], redundant_max_signal] = False
+
+        #     cur_min_signal = min_array[i]
+        #     cur_min_signal_value = low[i]
+        #     redundant_min_signal = (cur_min_signal == True) & (prev_signal == 2) & (cur_min_signal_value < prev_signal_value)
+        #     min_array[prev_signal_idx[redundant_min_signal], redundant_min_signal] = False
+            
+        #     prev_signal[cur_max_signal == True] = 1
+        #     prev_signal[cur_min_signal == True] = 2
+        #     prev_signal_idx[(cur_max_signal == True) | (cur_min_signal == True)] = i
+        #     prev_signal_value[cur_max_signal == True] = cur_max_signal_value[cur_max_signal == True]
+        #     prev_signal_value[cur_min_signal == True] = cur_min_signal_value[cur_min_signal == True]
+  
+
+        return min_array, max_array
+
     def get_middle_ex2(low: np.ndarray, high: np.ndarray, level: int = 1):
         def transform_middle_ex(local_array: np.ndarray, value: np.ndarray, ex_type: str):
             abs_ex_ratio = 0.1
@@ -167,7 +225,6 @@ class DataTransformer:
   
 
         return min_array, max_array
-
     
     def get_legacy_signal_one(trading_dates: List[datetime], trading_codes: List[str]):
         with open("strategy_one.json", "r") as fp:

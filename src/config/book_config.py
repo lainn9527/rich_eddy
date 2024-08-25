@@ -4,7 +4,8 @@ book_config = {
     "filter_high_before": True,
     "filter_correction_max_ratio": True,
     "filter_breakthrough_point": True,
-    "filter_eps": True,
+    "filter_early_breakthrough": False,
+    "filter_eps": False,
     "filter_recurring_eps": False,
     "filter_consolidation_time_window": False,
     "filter_relative_strength": False,
@@ -19,11 +20,11 @@ book_config = {
     "up_time_window": 180,
     "no_high_before_ratio": 0.3,
     "no_high_before_window": 120,
-    "correction_max_ratio": 0.30,
-    "correction_max_time_window": 20,
+    "correction_max_ratio": 0.40,
+    "correction_max_time_window": 5,
     "cheat_ratio": 0.20,
     "valid_signal_window": 60,
-    "consolidation_time_window": 1,
+    "consolidation_time_window": 5,
     "rs_threshold": 40,
     "rs_sma_period": 20,
     "init_stop_loss_ratio": 0.1,
@@ -36,7 +37,7 @@ book_config = {
     "market_index_sma_period": 3,
     "signal_threshold": 2,
     "volume_short_sma_period": 5,
-    "volume_long_sma_period": 20
+    "volume_long_sma_period": 10
   },
   "chip_strategy": {
     "foreign_total_holdings_ratio_sma_period": 10,
