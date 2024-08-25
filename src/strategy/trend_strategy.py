@@ -287,31 +287,31 @@ class TrendStrategy(Strategy):
 
     def filter_up_min_ratio(self, x, y, local_max_value, prev_low, up_min_ratio):
         # 上升超過一定幅度
-        return (local_max_value - prev_low) / prev_low > up_min_ratio
+        return (local_max_value - prev_low) / prev_low >= up_min_ratio
 
     def filter_down_max_ratio(self, x, y, local_max_value, next_low_value, down_max_ratio):
-        return (local_max_value - next_low_value) / local_max_value < down_max_ratio
+        return (local_max_value - next_low_value) / local_max_value <= down_max_ratio
 
     def filter_breakthrough_point(self, x, y, number_of_points):
         return number_of_points != 0
 
     def filter_consolidation_time_window(self, x, y, local_max_idx, breakthrough_point_idx, consolidation_time_window):
-        return breakthrough_point_idx - local_max_idx > consolidation_time_window
+        return breakthrough_point_idx - local_max_idx >= consolidation_time_window
     
     def filter_relative_strength(self, x, y, relative_strength_sma, rs_threshold):
-        return relative_strength_sma > rs_threshold
+        return relative_strength_sma >= rs_threshold
     
     def filter_market_index(self, x, y, market_index_close, market_index_sma):
-        return market_index_close > market_index_sma
+        return market_index_close >= market_index_sma
 
     def filter_chip(self, x, y, local_investor_holdings_ratio, local_investor_holdings_ratio_sma):
-        return not np.isnan(local_investor_holdings_ratio_sma) and local_investor_holdings_ratio > local_investor_holdings_ratio_sma
+        return not np.isnan(local_investor_holdings_ratio_sma) and local_investor_holdings_ratio >= local_investor_holdings_ratio_sma
 
     def filter_volume(self, x, y, volume, volume_short_sma, volume_long_sma):
-        return volume_short_sma > volume_long_sma
+        return volume_short_sma >= volume_long_sma
 
     def filter_close_above_sma(self, x, y, close, close_sma):
-        return close > close_sma
+        return close >= close_sma
 
     def filter_signal_threshold(self, signal_array, signal_threshold):
         signal_threshold_mask = (signal_array <= signal_threshold) & (signal_array > 0)

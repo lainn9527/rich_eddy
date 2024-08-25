@@ -39,6 +39,7 @@ class OrderRecord:
     net_profit_loss: float = 0
     net_profit_loss_rate: float = 0
     info: dict = None
+    custom_record_field: dict = field(default_factory=dict)
 
 
 @dataclass

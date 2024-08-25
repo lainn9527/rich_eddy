@@ -61,6 +61,7 @@ class DataColumn(Enum):
     Volume = "volume"
     Trading_Value = "trading_value"
     Total_Stocks = "total_stocks"
+    MARKET_TYPE = "market_type"
 
     # financial data
     EPS = "eps"
@@ -110,6 +111,7 @@ class DataCategoryColumn:
         DataColumn.Volume,
         DataColumn.Trading_Value,
         DataColumn.Total_Stocks,
+        DataColumn.MARKET_TYPE,
     ]
 
     finance_report = [
@@ -190,6 +192,26 @@ class TradingResultColumn:
     summary_result = ['name', 'used_cash', 'final_profit_loss', 'final_return', 'annualized_return', '#_trading_records']
     trading_record = ["code", "date", "volume", "amount", "profit_loss", "side", "buy_date", "cover_date", "buy_price", "cover_price", "return_rate", "holding_days", "avg_return_rate", "cover_reason"]
     account_record = ["date", "cash", "holding_value", "realized_profit_loss", "book_account_profit_loss", "book_account_profit_loss_rate"]
+
+class ColumnValueMapper:
+    mapper = {
+        DataColumn.MARKET_TYPE: {
+            "TSE": 0,
+            "OTC": 1,
+            "REG": 2,
+            "PSB": 3,
+            "TIB": 4
+        }
+    }
+    @staticmethod
+    def get_column_value_mapper(column_name) -> dict:
+        if column_name == DataColumn.MARKET_TYPE:
+            return ColumnValueMapper.mapper[DataColumn.MARKET_TYPE]
+        return None
+    @staticmethod
+    def get_reversed_column_value_mapper(column_name) -> dict:
+        return {v: k for k, v in ColumnValueMapper.get_column_value_mapper(column_name).items()}
+        
 
 FILTER_PARAMETER_MAPPER = {
     "filter_up_min_ratio": ["up_min_ratio"],
