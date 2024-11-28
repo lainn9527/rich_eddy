@@ -1,6 +1,6 @@
 name: AutoBump
 on:
-  workflow_dispatch:
+  workflow_dispatch
 jobs:
   auto-bump-version:
     runs-on: ubuntu-latest
