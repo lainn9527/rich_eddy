@@ -21,14 +21,27 @@ class Broker:
             price: float,
             volume: float,
             side: OrderSide,
-            is_cover: bool
+            is_cover: bool,
+            covered_order: Order = None
         ) -> Order:
+        if market == Market.TW and instrument == Instrument.Stock:
+            product_cost = volume * price
+            transaction_fee = volume * price * self.transaction_fee_rate * self.transaction_fee_discount
+            transaction_tax = volume * price * self.transaction_tax_rate if is_cover else 0
+            transaction_cost = transaction_fee + transaction_tax
 
-        product_cost = volume * price
-        transaction_fee = volume * price * self.transaction_fee_rate * self.transaction_fee_discount
-        transaction_tax = volume * price * self.transaction_tax_rate if is_cover else 0
-        transaction_cost = transaction_fee + transaction_tax
-        
+        elif market == Market.TW and instrument == Instrument.Future:
+            margin = 300000
+            base = 200
+            transaction_cost = 2 * base * volume
+            product_cost = margin * volume
+            if is_cover:
+                original_order_side = 1 if covered_order.side == OrderSide.Buy else -1
+                pnl = base * (price - covered_order.execute_price) * volume * original_order_side
+                product_cost = margin * volume + pnl
+            else:
+                product_cost = margin * volume
+            
         self.order_counter += 1
         return Order(
             order_id=f"{market}-{instrument}-{self.order_counter:05}",

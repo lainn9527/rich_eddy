@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from src.data_provider import DailyPriceProvider, FinanceProvider
+from src.data_provider import DailyPriceProvider, FinanceProvider, IntraDayProvider
 from src.utils.common import DataCategory, Instrument, Market, TimeFrame
 
 
@@ -34,6 +34,20 @@ config = {
             "data_category": DataCategory.Chip,
             "data_provider_class": DailyPriceProvider,
             "data_dir": Path("data/chip"),
+        },
+        {
+            "market": Market.TW,
+            "instrument": Instrument.Future,
+            "data_category": DataCategory.Minute_Price,
+            "data_provider_class": IntraDayProvider,
+            "data_dir": Path("intra_day_data/future_kbar"),
+        },
+        {
+            "market": Market.TW,
+            "instrument": Instrument.StockIndex,
+            "data_category": DataCategory.Minute_Index,
+            "data_provider_class": IntraDayProvider,
+            "data_dir": Path("intra_day_data/twse_index_kbar"),
         },
     ],
     "parameter": {

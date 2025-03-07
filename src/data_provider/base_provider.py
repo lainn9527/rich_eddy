@@ -1,11 +1,11 @@
 import os
 import csv
 from datetime import datetime
+import numpy as np
 from pathlib import Path
 from typing import Dict, List
 from multiprocessing import Pool
 
-import numpy as np
 
 from src.utils.common import DataCategory, DataColumn, Instrument, Market, ColumnValueMapper
 from src.utils.utils import split_payload, replace_null_with_empty
@@ -207,12 +207,13 @@ class BaseProvider:
                 self.np_array_column[column] = RedisClient.get_np_array(cache_key)
             else:
                 build_column_names.append(column)
-
+        
+        # if all column data is in cache, return
         if len(build_column_names) == 0:
             return
 
         # x: date, y: code
-        self.load_date_data()
+        self.load_date_data(start_year=2018)
         all_trading_date = self.get_all_dates()
         all_codes = self.get_all_codes()
         for column in build_column_names:

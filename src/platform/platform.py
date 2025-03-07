@@ -34,7 +34,8 @@ class Platform:
         result_path: Path = Path("result") / datetime.now().strftime("%Y%m%d_%H%M%S"),
         full_record: bool = False,
     ) -> None:
-        analyze_material = strategy.prepare_data(start_date, end_date)
+
+        strategy.prepare_data(start_date, end_date, result_path, full_record)
         strategy.ensure_data()
         trading_dates = strategy.get_trading_dates()
 
@@ -44,11 +45,6 @@ class Platform:
             strategy.step_end(trading_date)
 
         strategy.end(result_path, full_record)
-
-        if full_record and analyze_material is not None:
-            with open(result_path / "analyze_material.json", "w") as fp:
-                json.dump(analyze_material, fp, cls=NumpyEncoder)
-
 
     def place_order(
         self,
@@ -60,9 +56,10 @@ class Platform:
         volume: float,
         side: OrderSide,
         is_cover: bool,
+        cover_order: Order = None,
     ) -> Order:
         broker = self.get_broker(market, instrument)
-        return broker.create_order(market, instrument, code, time, price, volume, side, is_cover)
+        return broker.create_order(market, instrument, code, time, price, volume, side, is_cover, cover_order)
 
 
     def get_broker(self, market: Market, instrument: Instrument) -> Broker:

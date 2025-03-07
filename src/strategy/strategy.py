@@ -91,7 +91,7 @@ class Strategy:
         self.decorate_filter()
 
 
-    def prepare_data(self, start_date: datetime, end_date: datetime):
+    def prepare_data(self, start_date: datetime, end_date: datetime, result_dir: Path, full_record: bool):
         pass
 
 
@@ -179,6 +179,9 @@ class Strategy:
         order_record = self.order_record_dict[order_id]
         source_order = order_record.order
 
+        if order_record.is_covered:
+            raise Exception("Order already covered")
+
         if source_order.side == OrderSide.Buy:
             order_side = OrderSide.Sell
             position = -volume
@@ -194,7 +197,8 @@ class Strategy:
             price,
             volume,
             order_side,
-            True
+            True,
+            source_order,
         )
         net_profit_loss = cover_order.execute_value - cover_order.transaction_cost
         if np.isnan(net_profit_loss):
@@ -278,6 +282,8 @@ class Strategy:
         if self.log_level == "DETAIL":
             print(f"{self.current_trading_date.date()} place order: {order.side.value} {order.volume} {order.code} with ${order.execute_price}")
 
+        return order.order_id
+
 
     def update_book_profit_loss(self, trading_date: datetime):
         # update book profit loss
@@ -294,9 +300,10 @@ class Strategy:
                 source_order.code,
                 trading_date,
                 close_price,
-                order_record.open_position,
+                abs(order_record.open_position),
                 OrderSide.Sell if source_order.side == OrderSide.Buy else OrderSide.Buy,
                 True,
+                source_order,
             )
             net_profit_loss = cover_order.execute_value - cover_order.transaction_cost
             book_value = net_profit_loss
@@ -336,6 +343,7 @@ class Strategy:
 
 
     def end(self, result_dir: Path, full_record):
+        print(f"End date: {self.current_trading_date.date()}")
         used_cash = self.initial_cash - min([account["cash"] for account in self.account_history])
         if used_cash == 0:
             print("Zero trading record")
@@ -364,27 +372,27 @@ class Strategy:
         order_records = list(self.order_record_dict.values())
         sorted_order_records = sorted(order_records, key=lambda x: x.order.execute_time)
         order_record_rows = [TradingResultColumn.trading_record]
-        if len(sorted_order_records) > 0:
+        if len(sorted_order_records) > 0 and len(sorted_order_records[0].custom_record_field.keys()) > 0:
             order_record_rows[0].append(*(sorted_order_records[0].custom_record_field.keys()))
 
         for order_record in sorted_order_records:
             for cover_order in order_record.cover_order:
                 order_record_rows.append([
                     order_record.order.code,
-                    cover_order.execute_time.date(),
+                    cover_order.execute_time,
                     order_record.order.volume,
                     order_record.cost,
                     f"{order_record.net_profit_loss:.2f}",
                     order_record.order.side,
-                    order_record.order.execute_time.date(),
-                    cover_order.execute_time.date(),
+                    order_record.order.execute_time,
+                    cover_order.execute_time,
                     order_record.order.execute_price,
                     f"{cover_order.execute_price:.2f}",
                     f"{order_record.net_profit_loss_rate:.2f}",
                     (cover_order.execute_time - order_record.order.execute_time).days,
                     f"{order_record.net_profit_loss_rate / ((cover_order.execute_time - order_record.order.execute_time).days+1):.2f}",
                     order_record.cover_reason,
-                    *(order_record.custom_record_field.values()),
+                    *[json.dumps(item, default=str) for item in order_record.custom_record_field.values()],
                 ])
 
         # account history
@@ -394,7 +402,7 @@ class Strategy:
         ]
         for account in self.account_history:
             account_record_rows.append([
-                account["date"].date(),
+                account["date"],
                 f"{account['cash']:.2f}",
                 f"{account['book_holding_value']:.2f}",
                 f"{account['realized_profit_loss']:.2f}",

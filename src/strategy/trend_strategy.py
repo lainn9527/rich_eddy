@@ -1,12 +1,15 @@
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Dict
+from pathlib import Path
 import numpy as np
+import json
 
 from src.data_provider.base_provider import BaseProvider
 from src.data_store.data_store import DataStore
 from src.platform.platform import Platform
 from src.utils.common import DataCategory, Instrument, Market, OrderSide, DataColumn, TechnicalIndicator
 from src.utils.order import CoverOrderRecord, OrderRecord
+from src.utils.utils import NumpyEncoder
 from src.strategy.strategy import Strategy
 from src.data_transformer.data_transformer import DataTransformer
 
@@ -22,7 +25,7 @@ class TrendStrategy(Strategy):
     ):
         super().__init__(platform, data_store, cash, config, log_level)
 
-    def prepare_data(self, start_date: datetime, end_date: datetime):
+    def prepare_data(self, start_date: datetime, end_date: datetime, result_dir: Path, full_record: bool):
         data_start_date = start_date - timedelta(days=250)  # extract more data for technical indicator
         [self.open_, self.high_, self.low_, self.close_, self.volume_], dates, codes = self.data_store.get_data(
             market=Market.TW,
@@ -82,10 +85,13 @@ class TrendStrategy(Strategy):
             "end_date": end_date.isoformat()
         })
 
+        if full_record:
+            with open(result_dir / "analyze_material.json", "w") as fp:
+                json.dump(analyze_material, fp, cls=NumpyEncoder)
+
+
         self.trading_dates = self.slice_data(dates, start_date, end_date)
         self.trading_codes = codes
-
-        return analyze_material
 
     def get_signal_with_filter(self):
         strategy_one_config = self.config["strategy_one"]

@@ -8,6 +8,7 @@ from typing import List
 from ..utils.common import DataCategoryColumn, DataCategory
 from .base_data_processor import BaseDataProcessor
 
+
 class TejDataProcessor(BaseDataProcessor):
     column_file_path = "data/tej_col_names.json"
 
@@ -15,7 +16,7 @@ class TejDataProcessor(BaseDataProcessor):
     def transform_raw_data_to_date_data(
         cls,
         data_category: DataCategory,
-        raw_data_dir: Path,
+        raw_data_path: Path,
         dest_data_dir: Path,
         encoding: str = None,
     ):
@@ -26,19 +27,23 @@ class TejDataProcessor(BaseDataProcessor):
         4. write data with useful columns
         """
         year_to_daily_info = dict()
-        raw_data_dir = raw_data_dir
-        file_names = os.listdir(raw_data_dir)
-        raw_column_names = cls.get_column_names(data_category)
+        if raw_data_path.is_dir():
+            file_names = os.listdir(raw_data_path)
+            raw_data_paths = [raw_data_path / file_name for file_name in file_names]
+        else:
+            raw_data_paths = [raw_data_path]
 
+        raw_column_names = cls.get_column_names(data_category)
         # read tej raw data
-        for file_name in file_names:
-            file_path = raw_data_dir / file_name
+        for file_path in raw_data_paths:
             with open(file_path, "r", encoding=encoding) as fp:
                 lines = cls.remove_null_token(fp.readlines(), ["\x00", "-"])
                 lines = list(csv.reader(lines))
                 for line in lines[1:]:
                     # first field need to be code
-                    code, name, trading_date, remaining_line = cls.extract_code_and_date_from_line(line)
+                    code, name, trading_date, remaining_line = (
+                        cls.extract_code_and_date_from_line(line)
+                    )
                     if not cls.is_valid_stock(code):
                         continue
 
@@ -51,9 +56,14 @@ class TejDataProcessor(BaseDataProcessor):
                         year_to_daily_info[year][date_str] = []
 
                     if name != None:
-                        year_to_daily_info[year][date_str].append([code, name, trading_date.strftime("%Y%m%d")] + remaining_line)
+                        year_to_daily_info[year][date_str].append(
+                            [code, name, trading_date.strftime("%Y%m%d")]
+                            + remaining_line
+                        )
                     else:
-                        year_to_daily_info[year][date_str].append([code, trading_date.strftime("%Y%m%d")] + remaining_line)
+                        year_to_daily_info[year][date_str].append(
+                            [code, trading_date.strftime("%Y%m%d")] + remaining_line
+                        )
 
         print("finish reading all lines")
         gc.collect()
@@ -84,18 +94,23 @@ class TejDataProcessor(BaseDataProcessor):
                 year_dir_path.mkdir(parents=True, exist_ok=True)
 
             for trading_date, daily_info in daily_info_dict.items():
-                daily_info = cls.pick_columns(daily_info, DataCategoryColumn.get_columns(data_category), column_mapper)
+                daily_info = cls.pick_columns(
+                    daily_info,
+                    DataCategoryColumn.get_columns(data_category),
+                    column_mapper,
+                )
 
                 with open(f"{year_dir_path}/{trading_date}.csv", "w") as fp:
                     csv.writer(fp).writerows(daily_info)
         print("finish writing useful date data")
 
-
     def extract_code_and_date_from_line(line: List[str]):
         raise NotImplementedError
 
     @classmethod
-    def transform_useful_columns_and_stock(cls, date_data_dir: Path, dest_data_dir: Path, data_category: str):
+    def transform_useful_columns_and_stock(
+        cls, date_data_dir: Path, dest_data_dir: Path, data_category: str
+    ):
         year_dirs = os.listdir(date_data_dir)
         for year_dir in year_dirs:
             year_dir_path = date_data_dir / year_dir
@@ -117,7 +132,7 @@ class TejDataProcessor(BaseDataProcessor):
                     processed_lines = cls.pick_columns(
                         valid_stock_info,
                         DataCategoryColumn.get_columns(data_category),
-                        cls.tej_column_name_mapper[data_category.value]
+                        cls.tej_column_name_mapper[data_category.value],
                     )
 
                 new_file_path = f"{new_year_dir_path}/{file_name}"
@@ -125,23 +140,17 @@ class TejDataProcessor(BaseDataProcessor):
                     writer = csv.writer(fp)
                     writer.writerows(processed_lines)
 
-
     def get_column_names(data_category: DataCategory):
         with open(TejDataProcessor.column_file_path) as fp:
             col_names = json.load(fp)[data_category.value]
         return col_names
 
-
     def filter_valid_stock(codes: List[str]):
-        codes = list(
-            filter(lambda code: TejDataProcessor.is_valid_stock(code), codes)
-        )
+        codes = list(filter(lambda code: TejDataProcessor.is_valid_stock(code), codes))
         return codes
-
 
     def is_valid_stock(code: str):
         return True
-
 
     tej_column_name_mapper = {
         "daily_price": {
@@ -167,7 +176,6 @@ class TejDataProcessor(BaseDataProcessor):
         "chip": {
             "code": "股票代碼",
             "date": "日期",
-
             # 法人資料
             "foreign_buy_volume": "外資買超(張)",
             "foreign_sell_volume": "外資賣超(張)",
@@ -200,7 +208,6 @@ class TejDataProcessor(BaseDataProcessor):
             "director_supervisor_holdings_ratio": "董監持股％",
             "director_supervisor_pledge_ratio": "董監質押％",
             "director_supervisor_holdings": "董監持股數",
-
             # 信用交易
             "margin_buy_volume": "融資增加(張)",
             "margin_sell_volume": "融資減少(張)",
@@ -218,6 +225,6 @@ class TejDataProcessor(BaseDataProcessor):
             "short_sell_balance_amount": "融券餘額(千元)",
             "short_sell_usage_ratio": "融券使用率",
             "securities_to_capital_ratio": "券資比",
-            "total_stocks": "流通在外股數(百萬股)"
+            "total_stocks": "流通在外股數(百萬股)",
         },
     }

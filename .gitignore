@@ -12,8 +12,11 @@ __pycache__/
 .ipynb_checkpoints/
 
 data/
+intra_day_data/
 venv/
 
 .DS_Store
 .ssh
 result/
+record/
+future_result

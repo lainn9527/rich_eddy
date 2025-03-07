@@ -14,7 +14,7 @@ class Instrument(Enum):
     Stock = "stock"
     StockIndex = "stock_index"
     StockFuture = "stock_future"
-    StockOption = "stock_option"
+    Future = "future"
     CommodityFuture = "commodity_future"
     Index = "index"
 
@@ -46,7 +46,8 @@ class DataCategory(Enum):
 
     # market index
     Market_Index = "market_index"
-
+    Minute_Index = "minute_index"
+    
 class DataColumn(Enum):
     # meta
     Code = "code"
@@ -166,6 +167,25 @@ class DataCategoryColumn:
         DataColumn.Low,
         DataColumn.Close,
         DataColumn.Volume,
+    ]
+
+    minute_price = [
+        DataColumn.Code,
+        DataColumn.Date,
+        DataColumn.Open,
+        DataColumn.High,
+        DataColumn.Low,
+        DataColumn.Close,
+        DataColumn.Volume,
+    ]
+
+    minute_index = [
+        DataColumn.Code,
+        DataColumn.Date,
+        DataColumn.Open,
+        DataColumn.High,
+        DataColumn.Low,
+        DataColumn.Close,
     ]
 
     @staticmethod

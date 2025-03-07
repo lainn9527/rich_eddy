@@ -168,8 +168,8 @@ def tune(args: argparse.Namespace):
 
 def main(arguments: argparse.Namespace, config):
     start_date = datetime(2022, 11, 18)
-    start_date = datetime(2011, 11, 18)
-    end_date = datetime(2023, 12, 31)
+    start_date = datetime(2024, 1, 1)
+    end_date = datetime(2024, 9, 23)
     platform = Platform({ "broker": Broker()})
     cash = 10000000000
     data_store = DataStore()

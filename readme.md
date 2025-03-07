@@ -13,4 +13,3 @@ stock_record: stock price and volume info
 如何更新 EPS 資料
 1. 到 TEJ 選"IFRS以合併為主簡表(單季)-全產業"
 2. 執行 script/process_tej_finance_data.py (記得更新檔案位置)
-
